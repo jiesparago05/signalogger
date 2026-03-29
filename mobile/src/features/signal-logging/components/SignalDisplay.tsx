@@ -104,25 +104,25 @@ const styles = StyleSheet.create({
   },
   unitCompact: {
     fontSize: 11,
-    color: '#888',
+    color: '#999',
     marginLeft: 2,
   },
   infoText: {
-    color: '#ccc',
+    color: '#333',
     fontSize: 13,
   },
   infoTextSub: {
-    color: '#888',
+    color: '#777',
     fontSize: 11,
   },
   loggingBadge: {
-    backgroundColor: '#0f3460',
+    backgroundColor: '#533483',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   loggingText: {
-    color: '#00ff88',
+    color: '#fff',
     fontSize: 11,
   },
   circle: {

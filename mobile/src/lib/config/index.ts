@@ -55,6 +55,19 @@ export const SIGNAL_COLORS = {
   dead: '#ef4444', // red
 };
 
+export const CARRIER_COLORS: Record<string, string> = {
+  Smart: '#22c55e',   // green
+  Globe: '#3b82f6',   // blue
+  TNT: '#f97316',     // orange
+  GOMO: '#D20E56',    // pink-red
+  Sun: '#eab308',     // yellow
+  DITO: '#ef4444',    // red
+};
+
+export function getCarrierColor(carrier: string): string {
+  return CARRIER_COLORS[carrier] || '#888888';
+}
+
 export function getSignalLevel(dbm: number): keyof typeof SIGNAL_STRENGTH {
   if (dbm >= SIGNAL_STRENGTH.excellent) return 'excellent';
   if (dbm >= SIGNAL_STRENGTH.good) return 'good';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
-import { CARRIERS, NETWORK_TYPES } from '../../../lib/config';
+import { CARRIERS, NETWORK_TYPES, getCarrierColor } from '../../../lib/config';
 import { Carrier, NetworkType, FilterState } from '../../../types/signal';
 
 interface FilterChipsProps {
@@ -18,7 +18,9 @@ export function FilterChips({ filters, onToggleCarrier, onToggleNetworkType }: F
             key={carrier}
             style={[
               styles.chip,
-              filters.carriers.includes(carrier) && styles.chipActive,
+              filters.carriers.includes(carrier) && {
+                backgroundColor: getCarrierColor(carrier),
+              },
             ]}
             onPress={() => onToggleCarrier(carrier)}
           >
@@ -62,7 +64,7 @@ export function FilterChips({ filters, onToggleCarrier, onToggleNetworkType }: F
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 10,
+    top: 44,
     left: 0,
     right: 0,
     zIndex: 10,
