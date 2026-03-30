@@ -11,6 +11,7 @@ const sessionsRouter = require('./routes/sessions');
 const routesRouter = require('./routes/routes');
 const historyRouter = require('./routes/history');
 const workzonesRouter = require('./routes/workzones');
+const compareRouter = require('./routes/compare');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/sessions', sessionsRouter);
 app.use('/api/routes', routesRouter);
 app.use('/api/history', historyRouter);
 app.use('/api/workzones', workzonesRouter);
+app.use('/api/compare', compareRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
