@@ -82,7 +82,6 @@ export function ReportModal({
       return;
     }
     onSubmit({ category, note, attachments });
-    // Reset form
     setCategory(null);
     setNote('');
     setAttachments([]);
@@ -95,14 +94,14 @@ export function ReportModal({
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.title}>Report Signal Issue</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.closeBtn}>✕</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtnWrap}>
+              <Text style={styles.closeBtn}>{'\u2715'}</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.body}>
             <Text style={styles.autoInfo}>
-              {currentCarrier} · {currentNetworkType}
+              {currentCarrier} {'\u00B7'} {currentNetworkType}
             </Text>
 
             <Text style={styles.label}>Report Type</Text>
@@ -126,7 +125,7 @@ export function ReportModal({
             <TextInput
               style={styles.noteInput}
               placeholder="Describe the issue..."
-              placeholderTextColor="#666"
+              placeholderTextColor="#9CA3AF"
               value={note}
               onChangeText={setNote}
               maxLength={500}
@@ -138,7 +137,7 @@ export function ReportModal({
             <Text style={styles.label}>Attachments</Text>
             <View style={styles.attachRow}>
               <TouchableOpacity style={styles.attachBtn} onPress={handlePickPhoto}>
-                <Text style={styles.attachIcon}>📷</Text>
+                <Text style={styles.attachIcon}>{'\uD83D\uDCF7'}</Text>
                 <Text style={styles.attachLabel}>Photo</Text>
               </TouchableOpacity>
             </View>
@@ -162,14 +161,16 @@ export function ReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111827',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '85%',
+    borderTopWidth: 1,
+    borderColor: '#1F2937',
   },
   header: {
     flexDirection: 'row',
@@ -177,29 +178,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: '#1F2937',
   },
   title: {
-    color: '#fff',
+    color: '#F9FAFB',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  closeBtn: {
-    color: '#888',
-    fontSize: 20,
+  closeBtnWrap: {
     padding: 4,
+  },
+  closeBtn: {
+    color: '#9CA3AF',
+    fontSize: 18,
   },
   body: {
     padding: 16,
   },
   autoInfo: {
-    color: '#888',
+    color: '#9CA3AF',
     fontSize: 12,
     marginBottom: 16,
   },
   label: {
-    color: '#e0e0e0',
+    color: '#F9FAFB',
     fontSize: 13,
+    fontWeight: '500',
     marginBottom: 8,
     marginTop: 12,
   },
@@ -209,35 +213,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   catChip: {
-    backgroundColor: '#16213e',
+    backgroundColor: '#1F2937',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#374151',
   },
   catChipActive: {
-    backgroundColor: '#8a2a2a',
-    borderColor: '#ff3344',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: '#EF4444',
   },
   catText: {
-    color: '#aaa',
+    color: '#9CA3AF',
     fontSize: 12,
   },
   catTextActive: {
-    color: '#fff',
+    color: '#F9FAFB',
   },
   noteInput: {
-    backgroundColor: '#16213e',
-    borderRadius: 8,
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: '#F9FAFB',
     fontSize: 14,
     textAlignVertical: 'top',
     minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#374151',
   },
   charCount: {
-    color: '#666',
+    color: '#9CA3AF',
     fontSize: 10,
     textAlign: 'right',
     marginTop: 4,
@@ -247,8 +253,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   attachBtn: {
-    backgroundColor: '#16213e',
-    borderRadius: 8,
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#374151',
     padding: 12,
     alignItems: 'center',
     width: 70,
@@ -257,24 +265,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   attachLabel: {
-    color: '#888',
+    color: '#9CA3AF',
     fontSize: 10,
     marginTop: 4,
   },
   attachCount: {
-    color: '#00ff88',
+    color: '#22C55E',
     fontSize: 12,
     marginTop: 8,
+    fontWeight: '500',
   },
   submitBtn: {
-    backgroundColor: '#533483',
+    backgroundColor: '#22C55E',
     margin: 16,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
   },
   submitText: {
-    color: '#fff',
+    color: '#F9FAFB',
     fontSize: 16,
     fontWeight: '600',
   },

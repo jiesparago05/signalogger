@@ -6,6 +6,19 @@ export const API_BASE_URL = __DEV__
 
 export const CARRIERS: Carrier[] = ['Smart', 'Globe', 'TNT', 'GOMO', 'Sun', 'DITO'];
 
+export const CARRIER_COLORS: Record<string, string> = {
+  Smart: '#22c55e',
+  Globe: '#3b82f6',
+  TNT: '#f97316',
+  GOMO: '#D20E56',
+  Sun: '#eab308',
+  DITO: '#ef4444',
+};
+
+export function getCarrierColor(carrier: string): string {
+  return CARRIER_COLORS[carrier] || '#888888';
+}
+
 export const NETWORK_TYPES: NetworkType[] = ['2G', '3G', '4G', '5G', 'none'];
 
 export const REPORT_CATEGORIES: ReportCategory[] = [

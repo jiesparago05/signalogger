@@ -8,6 +8,7 @@ import {
   getLoggingConfig,
 } from '../services/background-logger';
 import { readSignal, RawSignalReading } from '../services/signal-reader';
+import { addSignalLog } from '../../offline-sync/services/log-store';
 import { SignalLog, LoggingConfig } from '../../../types/signal';
 
 export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
@@ -16,9 +17,13 @@ export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
   const [config, setConfig] = useState<LoggingConfig>(getLoggingConfig());
 
   useEffect(() => {
-    setOnLog((log: SignalLog) => {
+    setOnLog(async (log: SignalLog) => {
+      // Save to offline queue
+      await addSignalLog(log);
+
+      // Update UI
       setCurrentSignal({
-        carrier: log.carrier,
+        carrier: log.carrier as RawSignalReading['carrier'],
         networkType: log.networkType,
         signal: log.signal,
         connection: log.connection,

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { RawSignalReading } from '../services/signal-reader';
 import { getSignalColor } from '../../../lib/config';
-import { formatDbm, formatPing, signalLevelLabel } from '../../../lib/utils/signal-helpers';
+import { formatPing, signalLevelLabel } from '../../../lib/utils/signal-helpers';
 
 interface SignalDisplayProps {
   signal: RawSignalReading | null;
@@ -13,32 +13,34 @@ interface SignalDisplayProps {
 export function SignalDisplay({ signal, isLogging, compact }: SignalDisplayProps) {
   if (!signal) {
     return (
-      <View style={styles.container}>
+      <View style={styles.heroContainer}>
         <Text style={styles.noSignal}>Reading signal...</Text>
       </View>
     );
   }
 
   const color = getSignalColor(signal.signal.dbm);
+  const level = signalLevelLabel(signal.signal.dbm);
 
   if (compact) {
     return (
-      <View style={styles.compactContainer}>
-        <View style={styles.compactLeft}>
-          <Text style={[styles.dbmCompact, { color }]}>{signal.signal.dbm}</Text>
-          <Text style={styles.unitCompact}>dBm</Text>
-        </View>
-        <View style={styles.compactRight}>
-          <Text style={styles.infoText}>{signal.carrier} · {signal.networkType}</Text>
-          {signal.connection.ping && (
-            <Text style={styles.infoTextSub}>{formatPing(signal.connection.ping)}</Text>
+      <View style={styles.heroContainer}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroSignal}>
+            <Text style={[styles.heroDbm, { color }]}>{signal.signal.dbm}</Text>
+            <Text style={styles.heroUnit}>dBm</Text>
+          </View>
+          {isLogging && (
+            <View style={styles.loggingBadge}>
+              <Text style={styles.loggingText}>{'\u25CF'} Mapping</Text>
+            </View>
           )}
         </View>
-        {isLogging && (
-          <View style={styles.loggingBadge}>
-            <Text style={styles.loggingText}>● Logging</Text>
-          </View>
-        )}
+        <Text style={[styles.heroLevel, { color }]}>{level}</Text>
+        <Text style={styles.heroInfo}>
+          {signal.carrier} {'\u00B7'} {signal.networkType}
+          {signal.connection.ping ? ` ${'\u00B7'} ${formatPing(signal.connection.ping)}` : ''}
+        </Text>
       </View>
     );
   }
@@ -49,7 +51,7 @@ export function SignalDisplay({ signal, isLogging, compact }: SignalDisplayProps
         <Text style={[styles.dbm, { color }]}>{signal.signal.dbm}</Text>
         <Text style={styles.unit}>dBm</Text>
       </View>
-      <Text style={[styles.level, { color }]}>{signalLevelLabel(signal.signal.dbm)}</Text>
+      <Text style={[styles.level, { color }]}>{level}</Text>
 
       <View style={styles.metricsRow}>
         <MetricItem label="Network" value={signal.networkType} />
@@ -84,47 +86,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
   },
-  compactContainer: {
+  // Hero layout for compact mode
+  heroContainer: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  heroTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    gap: 12,
   },
-  compactLeft: {
+  heroSignal: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginRight: 12,
   },
-  compactRight: {
-    flex: 1,
-  },
-  dbmCompact: {
-    fontSize: 22,
+  heroDbm: {
+    fontSize: 34,
     fontWeight: 'bold',
   },
-  unitCompact: {
-    fontSize: 11,
-    color: '#888',
-    marginLeft: 2,
+  heroUnit: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginLeft: 4,
   },
-  infoText: {
-    color: '#ccc',
+  heroLevel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  heroInfo: {
+    color: '#9CA3AF',
     fontSize: 13,
-  },
-  infoTextSub: {
-    color: '#888',
-    fontSize: 11,
+    marginTop: 4,
   },
   loggingBadge: {
-    backgroundColor: '#0f3460',
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   loggingText: {
-    color: '#00ff88',
+    color: '#4ADE80',
     fontSize: 11,
+    fontWeight: '600',
   },
+  noSignal: {
+    color: '#9CA3AF',
+    fontSize: 14,
+  },
+  // Full display (non-compact)
   circle: {
     width: 100,
     height: 100,
@@ -140,7 +153,7 @@ const styles = StyleSheet.create({
   },
   unit: {
     fontSize: 12,
-    color: '#888',
+    color: '#9CA3AF',
   },
   level: {
     fontSize: 14,
@@ -158,17 +171,13 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   metricValue: {
-    color: '#00ff88',
+    color: '#F9FAFB',
     fontSize: 16,
     fontWeight: 'bold',
   },
   metricLabel: {
-    color: '#888',
+    color: '#9CA3AF',
     fontSize: 10,
     marginTop: 2,
-  },
-  noSignal: {
-    color: '#888',
-    fontSize: 14,
   },
 });
