@@ -14,7 +14,12 @@ import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logg
 import { useSync } from '../../offline-sync/hooks/use-sync';
 import { addReport } from '../../offline-sync/services/log-store';
 import { getDeviceId } from '../../../lib/config/device';
-import { Alert } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
+import { SessionsList } from '../../sessions/components/SessionsList';
+import { SessionDetail } from '../../sessions/components/SessionDetail';
+import { RoutesList } from '../../routes/components/RoutesList';
+import { RouteDetail } from '../../routes/components/RouteDetail';
+import { MappingSession, CommuteRoute } from '../../../types/signal';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -123,6 +128,9 @@ export function MapScreen() {
   const lastViewport = useRef<{ bounds: ViewportBounds; zoom: number } | null>(null);
   const busyRef = useRef(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'sessions' | 'routes'>('live');
+  const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
   const { signals, heatmapTiles, fetchData } = useMapData();
@@ -343,16 +351,67 @@ export function MapScreen() {
       {/* Bottom sheet */}
       <View style={styles.bottomSheet}>
         <View style={styles.handle} />
-        <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
-        <View
-          style={[styles.cta, isActive && styles.ctaActive]}
-          onTouchEnd={() => handleToggle()}
-        >
-          <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
-            {isActive ? 'Stop Mapping' : 'Start Mapping'}
-          </Text>
+
+        {/* Tab bar */}
+        <View style={styles.tabBar}>
+          {(['live', 'sessions', 'routes'] as const).map((tab) => (
+            <View
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onTouchEnd={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab === 'live' ? 'Live' : tab === 'sessions' ? 'Sessions' : 'Routes'}
+              </Text>
+            </View>
+          ))}
         </View>
+
+        {/* Live tab */}
+        {activeTab === 'live' && (
+          <View>
+            <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
+            <View
+              style={[styles.cta, isActive && styles.ctaActive]}
+              onTouchEnd={() => handleToggle()}
+            >
+              <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
+                {isActive ? 'Stop Mapping' : 'Start Mapping'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Sessions tab */}
+        {activeTab === 'sessions' && (
+          <View style={styles.tabContent}>
+            <SessionsList onSelectSession={(s) => setSelectedSession(s)} />
+          </View>
+        )}
+
+        {/* Routes tab */}
+        {activeTab === 'routes' && (
+          <View style={styles.tabContent}>
+            <RoutesList onSelectRoute={(r) => setSelectedRoute(r)} />
+          </View>
+        )}
       </View>
+
+      {/* Session detail overlay */}
+      {selectedSession && (
+        <SessionDetail
+          session={selectedSession}
+          onBack={() => setSelectedSession(null)}
+        />
+      )}
+
+      {/* Route detail overlay */}
+      {selectedRoute && (
+        <RouteDetail
+          route={selectedRoute}
+          onBack={() => setSelectedRoute(null)}
+        />
+      )}
 
       {/* Report modal */}
       <ReportModal
@@ -436,6 +495,33 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 4,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
+    marginBottom: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#22C55E',
+  },
+  tabText: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#22C55E',
+    fontWeight: '600',
+  },
+  tabContent: {
+    maxHeight: 250,
   },
   cta: {
     backgroundColor: '#22C55E',
