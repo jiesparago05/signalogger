@@ -231,4 +231,21 @@ export const api = {
       });
     },
   },
+
+  compare: {
+    route(routeId: string): Promise<{
+      ranking: { carrier: string; avgDbm: number; activityLevel: string; sampleCount: number }[];
+      segments: { label: string; distanceMeters: number; carriers: { carrier: string; avgDbm: number; activityLevel: string }[] }[];
+      totalDataPoints: number;
+    }> {
+      return request(`/compare/route/${routeId}`);
+    },
+
+    location(lng: number, lat: number, radius = 500, days = 7): Promise<{
+      data: { carrier: string; avgDbm: number; activityLevel: string; sampleCount: number }[];
+      count: number;
+    }> {
+      return request(`/compare/location?lng=${lng}&lat=${lat}&radius=${radius}&days=${days}`);
+    },
+  },
 };
