@@ -1,16 +1,30 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { RawSignalReading } from '../services/signal-reader';
+import { SignalStability } from '../hooks/use-signal-logger';
 import { getSignalColor } from '../../../lib/config';
 import { formatPing, signalLevelLabel } from '../../../lib/utils/signal-helpers';
 
 interface SignalDisplayProps {
   signal: RawSignalReading | null;
   isLogging: boolean;
+  stability?: SignalStability | null;
   compact?: boolean;
 }
 
-export function SignalDisplay({ signal, isLogging, compact }: SignalDisplayProps) {
+const STABILITY_COLORS = {
+  Stable: '#22C55E',
+  Fluctuating: '#EAB308',
+  Unstable: '#EF4444',
+};
+
+const STABILITY_ICONS = {
+  Stable: '\u25CF',
+  Fluctuating: '\u26A0',
+  Unstable: '\u25CF',
+};
+
+export function SignalDisplay({ signal, isLogging, stability, compact }: SignalDisplayProps) {
   if (!signal) {
     return (
       <View style={styles.heroContainer}>
@@ -23,6 +37,16 @@ export function SignalDisplay({ signal, isLogging, compact }: SignalDisplayProps
   const level = signalLevelLabel(signal.signal.dbm);
 
   if (compact) {
+    const rangeText = stability
+      ? `${stability.min} to ${stability.max}`
+      : `${signal.signal.dbm} to ${signal.signal.dbm}`;
+    const stabilityColor = stability
+      ? STABILITY_COLORS[stability.label]
+      : '#9CA3AF';
+    const stabilityText = stability
+      ? `${STABILITY_ICONS[stability.label]} ${stability.label}`
+      : 'Measuring...';
+
     return (
       <View style={styles.heroContainer}>
         <View style={styles.heroTop}>
@@ -41,6 +65,15 @@ export function SignalDisplay({ signal, isLogging, compact }: SignalDisplayProps
           {signal.carrier} {'\u00B7'} {signal.networkType}
           {signal.connection.ping ? ` ${'\u00B7'} ${formatPing(signal.connection.ping)}` : ''}
         </Text>
+
+        <View style={styles.stabilityRow}>
+          <Text style={styles.rangeText}>
+            Range: {rangeText}
+          </Text>
+          <Text style={[styles.stabilityLabel, { color: stabilityColor }]}>
+            {stabilityText}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -86,7 +119,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
   },
-  // Hero layout for compact mode
   heroContainer: {
     alignItems: 'center',
     paddingVertical: 16,
@@ -120,6 +152,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
+  stabilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  rangeText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+  },
+  stabilityLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   loggingBadge: {
     backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderWidth: 1,
@@ -137,7 +186,6 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontSize: 14,
   },
-  // Full display (non-compact)
   circle: {
     width: 100,
     height: 100,

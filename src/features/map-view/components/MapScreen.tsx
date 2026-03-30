@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { FilterChips } from './FilterChips';
 import { SignalDisplay } from '../../signal-logging/components/SignalDisplay';
@@ -117,6 +117,7 @@ const LEAFLET_HTML = `
 export function MapScreen() {
   const webViewRef = useRef<WebView>(null);
   const lastViewport = useRef<{ bounds: ViewportBounds; zoom: number } | null>(null);
+  const busyRef = useRef(false);
   const [reportVisible, setReportVisible] = useState(false);
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
@@ -127,7 +128,7 @@ export function MapScreen() {
     console.log('New signal log:', log.signal.dbm, log.carrier);
   }, []);
 
-  const { isActive, currentSignal, toggle } = useSignalLogger(handleNewLog);
+  const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog);
 
   const updateUserMarker = useCallback((lat: number, lng: number) => {
     webViewRef.current?.injectJavaScript(
@@ -136,6 +137,8 @@ export function MapScreen() {
   }, []);
 
   const centerOnUser = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     try {
       const loc = await getCurrentLocation();
       const [lng, lat] = loc.coordinates;
@@ -143,30 +146,56 @@ export function MapScreen() {
       webViewRef.current?.injectJavaScript(
         `map.setView([${lat},${lng}], 15); true;`,
       );
-    } catch {}
+    } catch (err) {
+      console.warn('centerOnUser failed:', err);
+    } finally {
+      busyRef.current = false;
+    }
   }, [updateUserMarker]);
 
   // Watch location while logging — update dot
   React.useEffect(() => {
     if (!isActive) return;
 
-    const watchId = watchLocation((loc) => {
-      const [lng, lat] = loc.coordinates;
-      updateUserMarker(lat, lng);
-    });
+    let watchId: number | null = null;
+    try {
+      watchId = watchLocation(
+        (loc) => {
+          const [lng, lat] = loc.coordinates;
+          updateUserMarker(lat, lng);
+        },
+        (err) => console.warn('watchLocation error:', err),
+      );
+    } catch (err) {
+      console.warn('Failed to start watchLocation:', err);
+    }
 
-    return () => clearWatch(watchId);
+    return () => {
+      if (watchId !== null) {
+        try { clearWatch(watchId); } catch {}
+      }
+    };
   }, [isActive, updateUserMarker]);
 
   // Center on user on first load
   React.useEffect(() => {
-    centerOnUser();
+    const timer = setTimeout(() => centerOnUser(), 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleToggle = useCallback(async () => {
-    await toggle();
-    if (!isActive) {
-      centerOnUser();
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      await toggle();
+      // Small delay before centering to let background service start
+      if (!isActive) {
+        setTimeout(() => centerOnUser(), 1500);
+      }
+    } catch (err) {
+      console.warn('handleToggle error:', err);
+    } finally {
+      setTimeout(() => { busyRef.current = false; }, 2000);
     }
   }, [toggle, isActive, centerOnUser]);
 
@@ -247,33 +276,33 @@ export function MapScreen() {
       />
 
       {/* Locate button */}
-      <TouchableOpacity
+      <View
         style={styles.locateBtn}
-        onPress={centerOnUser}
+        onTouchEnd={() => centerOnUser()}
       >
         <Text style={styles.locateBtnText}>{'\u25CE'}</Text>
-      </TouchableOpacity>
+      </View>
 
       {/* Report button */}
-      <TouchableOpacity
+      <View
         style={styles.reportBtn}
-        onPress={() => setReportVisible(true)}
+        onTouchEnd={() => setReportVisible(true)}
       >
         <Text style={styles.reportBtnText}>{'\u26A0\uFE0F'}</Text>
-      </TouchableOpacity>
+      </View>
 
       {/* Bottom sheet */}
       <View style={styles.bottomSheet}>
         <View style={styles.handle} />
-        <SignalDisplay signal={currentSignal} isLogging={isActive} compact />
-        <TouchableOpacity
+        <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
+        <View
           style={[styles.cta, isActive && styles.ctaActive]}
-          onPress={handleToggle}
+          onTouchEnd={() => handleToggle()}
         >
           <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
             {isActive ? 'Stop Mapping' : 'Start Mapping'}
           </Text>
-        </TouchableOpacity>
+        </View>
       </View>
 
       {/* Report modal */}
@@ -299,7 +328,7 @@ const styles = StyleSheet.create({
   locateBtn: {
     position: 'absolute',
     right: 16,
-    bottom: 280,
+    bottom: 310,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -321,7 +350,7 @@ const styles = StyleSheet.create({
   reportBtn: {
     position: 'absolute',
     right: 16,
-    bottom: 224,
+    bottom: 256,
     width: 44,
     height: 44,
     borderRadius: 22,

@@ -6,19 +6,6 @@ export const API_BASE_URL = __DEV__
 
 export const CARRIERS: Carrier[] = ['Smart', 'Globe', 'TNT', 'GOMO', 'Sun', 'DITO'];
 
-export const CARRIER_COLORS: Record<string, string> = {
-  Smart: '#22c55e',
-  Globe: '#3b82f6',
-  TNT: '#f97316',
-  GOMO: '#D20E56',
-  Sun: '#eab308',
-  DITO: '#ef4444',
-};
-
-export function getCarrierColor(carrier: string): string {
-  return CARRIER_COLORS[carrier] || '#888888';
-}
-
 export const NETWORK_TYPES: NetworkType[] = ['2G', '3G', '4G', '5G', 'none'];
 
 export const REPORT_CATEGORIES: ReportCategory[] = [
@@ -56,8 +43,8 @@ export const SIGNAL_STRENGTH = {
   excellent: -65,
   good: -75,
   moderate: -85,
-  weak: -95,
-  // anything below -95 is dead/no signal
+  weak: -105,
+  // anything below -105 is dead/no signal
 };
 
 export const SIGNAL_COLORS = {
@@ -67,6 +54,19 @@ export const SIGNAL_COLORS = {
   weak: '#f97316', // orange
   dead: '#ef4444', // red
 };
+
+export const CARRIER_COLORS: Record<string, string> = {
+  Smart: '#22c55e',   // green
+  Globe: '#3b82f6',   // blue
+  TNT: '#f97316',     // orange
+  GOMO: '#D20E56',    // pink-red
+  Sun: '#eab308',     // yellow
+  DITO: '#ef4444',    // red
+};
+
+export function getCarrierColor(carrier: string): string {
+  return CARRIER_COLORS[carrier] || '#888888';
+}
 
 export function getSignalLevel(dbm: number): keyof typeof SIGNAL_STRENGTH {
   if (dbm >= SIGNAL_STRENGTH.excellent) return 'excellent';
