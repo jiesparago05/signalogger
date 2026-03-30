@@ -22,6 +22,9 @@ import { SessionDetail } from '../../sessions/components/SessionDetail';
 import { RoutesList } from '../../routes/components/RoutesList';
 import { RouteDetail } from '../../routes/components/RouteDetail';
 import { MappingSession, CommuteRoute } from '../../../types/signal';
+import { LocationComparison } from '../../comparison/components/LocationComparison';
+import { SearchBar } from '../../comparison/components/SearchBar';
+import { RouteComparison } from '../../comparison/components/RouteComparison';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -99,6 +102,14 @@ const LEAFLET_HTML = `
       circles.push(c);
     }
 
+    map.on('click', function(e) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'mapTap',
+        lng: e.latlng.lng,
+        lat: e.latlng.lat,
+      }));
+    });
+
     map.on('moveend', function() {
       var bounds = map.getBounds();
       var zoom = map.getZoom();
@@ -133,6 +144,10 @@ export function MapScreen() {
   const [activeTab, setActiveTab] = useState<'live' | 'sessions' | 'routes'>('live');
   const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
+  const [compareVisible, setCompareVisible] = useState(false);
+  const [compareCoords, setCompareCoords] = useState<[number, number] | null>(null);
+  const [routeCompareId, setRouteCompareId] = useState<string | null>(null);
+  const [routeCompareName, setRouteCompareName] = useState('');
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
   const { signals, heatmapTiles, fetchData } = useMapData();
@@ -238,6 +253,9 @@ export function MapScreen() {
           };
           lastViewport.current = { bounds: viewport, zoom: data.zoom };
           fetchData(viewport, data.zoom, filters);
+        } else if (data.type === 'mapTap') {
+          setCompareCoords([data.lng, data.lat]);
+          setCompareVisible(true);
         }
       } catch {}
     },
@@ -334,6 +352,17 @@ export function MapScreen() {
         onToggleNetworkType={toggleNetworkType}
       />
 
+      {/* Search bar */}
+      <SearchBar
+        onSelectLocation={(loc) => {
+          webViewRef.current?.injectJavaScript(
+            `map.setView([${loc.lat},${loc.lng}], 15); true;`,
+          );
+          setCompareCoords([loc.lng, loc.lat]);
+          setCompareVisible(true);
+        }}
+      />
+
       {/* Draggable button group */}
       <DraggableButtonGroup
         actions={[
@@ -375,6 +404,18 @@ export function MapScreen() {
                 {isActive ? 'Stop Mapping' : 'Start Mapping'}
               </Text>
             </View>
+            <View
+              style={styles.compareBtn}
+              onTouchEnd={async () => {
+                try {
+                  const loc = await getCurrentLocation();
+                  setCompareCoords(loc.coordinates);
+                  setCompareVisible(true);
+                } catch {}
+              }}
+            >
+              <Text style={styles.compareBtnText}>{'\uD83D\uDCCA'} Compare Carriers Here</Text>
+            </View>
           </View>
         )}
 
@@ -406,6 +447,28 @@ export function MapScreen() {
         <RouteDetail
           route={selectedRoute}
           onBack={() => setSelectedRoute(null)}
+        />
+      )}
+
+      {/* Location comparison popup */}
+      <LocationComparison
+        visible={compareVisible}
+        coordinates={compareCoords}
+        onClose={() => {
+          setCompareVisible(false);
+          setCompareCoords(null);
+        }}
+      />
+
+      {/* Route comparison overlay */}
+      {routeCompareId && (
+        <RouteComparison
+          routeId={routeCompareId}
+          routeName={routeCompareName}
+          onBack={() => {
+            setRouteCompareId(null);
+            setRouteCompareName('');
+          }}
         />
       )}
 
@@ -476,5 +539,19 @@ const styles = StyleSheet.create({
   },
   ctaTextActive: {
     color: '#EF4444',
+  },
+  compareBtn: {
+    backgroundColor: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  compareBtnText: {
+    color: '#F9FAFB',
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
