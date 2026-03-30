@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -76,16 +76,21 @@ export function ReportModal({
     ]);
   };
 
+  const submittingRef = useRef(false);
+
   const handleSubmit = () => {
+    if (submittingRef.current) return;
     if (!category) {
       Alert.alert('Error', 'Please select a report type');
       return;
     }
+    submittingRef.current = true;
     onSubmit({ category, note, attachments });
     setCategory(null);
     setNote('');
     setAttachments([]);
     onClose();
+    setTimeout(() => { submittingRef.current = false; }, 2000);
   };
 
   return (

@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Dimensions } from 'react-native';
+import { SwipeableSheet } from './SwipeableSheet';
 import { WebView } from 'react-native-webview';
 import { FilterChips } from './FilterChips';
 import { SignalDisplay } from '../../signal-logging/components/SignalDisplay';
@@ -7,10 +8,20 @@ import { ReportModal } from '../../manual-report/components/ReportModal';
 import { useMapData } from '../hooks/use-map-data';
 import { useFilters } from '../hooks/use-filters';
 import { useSignalLogger } from '../../signal-logging/hooks/use-signal-logger';
+import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
 import { useSync } from '../../offline-sync/hooks/use-sync';
+import { addReport } from '../../offline-sync/services/log-store';
+import { getDeviceId } from '../../../lib/config/device';
+import { Alert, ScrollView } from 'react-native';
+import { DraggableButtonGroup } from './DraggableButton';
+import { SessionsList } from '../../sessions/components/SessionsList';
+import { SessionDetail } from '../../sessions/components/SessionDetail';
+import { RoutesList } from '../../routes/components/RoutesList';
+import { RouteDetail } from '../../routes/components/RouteDetail';
+import { MappingSession, CommuteRoute } from '../../../types/signal';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -119,14 +130,19 @@ export function MapScreen() {
   const lastViewport = useRef<{ bounds: ViewportBounds; zoom: number } | null>(null);
   const busyRef = useRef(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'sessions' | 'routes'>('live');
+  const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
   const { signals, heatmapTiles, fetchData } = useMapData();
   const { status: syncStatus } = useSync();
 
+  const { activeSession, startSession, addLog, completeSession } = useSession();
+
   const handleNewLog = useCallback((log: SignalLog) => {
-    console.log('New signal log:', log.signal.dbm, log.carrier);
-  }, []);
+    addLog(log);
+  }, [addLog]);
 
   const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog);
 
@@ -187,9 +203,21 @@ export function MapScreen() {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      await toggle();
-      // Small delay before centering to let background service start
-      if (!isActive) {
+      if (isActive) {
+        await toggle();
+        const completed = await completeSession();
+        if (completed) {
+          Alert.alert(
+            'Session Complete',
+            `${completed.logCount} logs \u00B7 ${completed.distanceMeters}m \u00B7 avg ${completed.avgDbm} dBm`,
+            [{ text: 'OK' }],
+          );
+        }
+      } else {
+        const carrier = currentSignal?.carrier || 'Unknown';
+        const networkType = currentSignal?.networkType || 'none';
+        await startSession(carrier, networkType);
+        await toggle();
         setTimeout(() => centerOnUser(), 1500);
       }
     } catch (err) {
@@ -197,7 +225,7 @@ export function MapScreen() {
     } finally {
       setTimeout(() => { busyRef.current = false; }, 2000);
     }
-  }, [toggle, isActive, centerOnUser]);
+  }, [toggle, isActive, currentSignal, startSession, completeSession, centerOnUser]);
 
   const handleWebViewMessage = useCallback(
     (event: any) => {
@@ -249,11 +277,42 @@ export function MapScreen() {
     updateOverlays();
   }, [updateOverlays]);
 
+  const reportBusyRef = useRef(false);
   const handleReportSubmit = useCallback(
-    (data: any) => {
-      console.log('Report submitted:', data);
+    async (data: { category: any; note: string; attachments: any[] }) => {
+      if (reportBusyRef.current) return;
+      reportBusyRef.current = true;
+      try {
+        const [location, deviceId] = await Promise.all([
+          getCurrentLocation().catch(() => ({
+            type: 'Point' as const,
+            coordinates: [0, 0] as [number, number],
+            accuracy: 0,
+          })),
+          getDeviceId(),
+        ]);
+
+        await addReport({
+          timestamp: new Date(),
+          location: { type: 'Point', coordinates: location.coordinates },
+          carrier: currentSignal?.carrier || 'Unknown',
+          networkType: currentSignal?.networkType || 'none',
+          category: data.category,
+          note: data.note,
+          attachments: data.attachments,
+          deviceId,
+          synced: false,
+        });
+
+        Alert.alert('Report Submitted', 'Your signal report has been saved and will sync when connected.');
+      } catch (err) {
+        console.warn('Report submit error:', err);
+        Alert.alert('Error', 'Failed to save report. Please try again.');
+      } finally {
+        setTimeout(() => { reportBusyRef.current = false; }, 3000);
+      }
     },
-    [],
+    [currentSignal],
   );
 
   return (
@@ -275,35 +334,80 @@ export function MapScreen() {
         onToggleNetworkType={toggleNetworkType}
       />
 
-      {/* Locate button */}
-      <View
-        style={styles.locateBtn}
-        onTouchEnd={() => centerOnUser()}
-      >
-        <Text style={styles.locateBtnText}>{'\u25CE'}</Text>
-      </View>
-
-      {/* Report button */}
-      <View
-        style={styles.reportBtn}
-        onTouchEnd={() => setReportVisible(true)}
-      >
-        <Text style={styles.reportBtnText}>{'\u26A0\uFE0F'}</Text>
-      </View>
+      {/* Draggable button group */}
+      <DraggableButtonGroup
+        actions={[
+          { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
+          { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
+        ]}
+      />
 
       {/* Bottom sheet */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.handle} />
-        <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
-        <View
-          style={[styles.cta, isActive && styles.ctaActive]}
-          onTouchEnd={() => handleToggle()}
-        >
-          <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
-            {isActive ? 'Stop Mapping' : 'Start Mapping'}
-          </Text>
+      <SwipeableSheet
+        collapsedHeight={120}
+        expandedHeight={Math.round(Dimensions.get('window').height * 0.42)}
+      >
+
+        {/* Tab bar */}
+        <View style={styles.tabBar}>
+          {(['live', 'sessions', 'routes'] as const).map((tab) => (
+            <View
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onTouchEnd={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab === 'live' ? 'Live' : tab === 'sessions' ? 'Sessions' : 'Routes'}
+              </Text>
+            </View>
+          ))}
         </View>
-      </View>
+
+        {/* Live tab */}
+        {activeTab === 'live' && (
+          <View>
+            <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
+            <View
+              style={[styles.cta, isActive && styles.ctaActive]}
+              onTouchEnd={() => handleToggle()}
+            >
+              <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
+                {isActive ? 'Stop Mapping' : 'Start Mapping'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Sessions tab */}
+        {activeTab === 'sessions' && (
+          <View style={styles.tabContent}>
+            <SessionsList onSelectSession={(s) => setSelectedSession(s)} />
+          </View>
+        )}
+
+        {/* Routes tab */}
+        {activeTab === 'routes' && (
+          <View style={styles.tabContent}>
+            <RoutesList onSelectRoute={(r) => setSelectedRoute(r)} />
+          </View>
+        )}
+      </SwipeableSheet>
+
+      {/* Session detail overlay */}
+      {selectedSession && (
+        <SessionDetail
+          session={selectedSession}
+          onBack={() => setSelectedSession(null)}
+        />
+      )}
+
+      {/* Route detail overlay */}
+      {selectedRoute && (
+        <RouteDetail
+          route={selectedRoute}
+          onBack={() => setSelectedRoute(null)}
+        />
+      )}
 
       {/* Report modal */}
       <ReportModal
@@ -325,68 +429,32 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  locateBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 310,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-  },
-  locateBtnText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-  },
-  reportBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 256,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-  },
-  reportBtnText: {
-    fontSize: 18,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(17, 24, 39, 0.95)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
     marginBottom: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#22C55E',
+  },
+  tabText: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#22C55E',
+    fontWeight: '600',
+  },
+  tabContent: {
+    maxHeight: 250,
   },
   cta: {
     backgroundColor: '#22C55E',
