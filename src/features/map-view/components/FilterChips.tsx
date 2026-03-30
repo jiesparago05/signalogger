@@ -156,10 +156,10 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     top: 48,
-    left: 0,
+    left: 52,
     right: 0,
     zIndex: 10,
-    paddingHorizontal: 12,
+    paddingRight: 12,
   },
   row: {
     flexDirection: 'row',
