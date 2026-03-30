@@ -177,9 +177,9 @@ SignalHistory {
 
 ### Backend
 
-1. **New models:** `MappingSession`, `CommuteRoute`, `SignalHistory`
-2. **New routes:** `/api/sessions`, `/api/routes`, `/api/history`
-3. **Extended worker:** heatmap aggregator also computes `SignalHistory` tiles (hourly averages per grid cell per carrier)
+1. **New models:** `MappingSession`, `CommuteRoute`, `SignalHistory`, `WorkZone`, `WorkSpotReview`
+2. **New routes:** `/api/sessions`, `/api/routes`, `/api/history`, `/api/workzones`, `/api/reviews`
+3. **Extended worker:** heatmap aggregator also computes `SignalHistory` tiles and detects `WorkZone` hot spots
 
 ### Mobile App
 
@@ -189,6 +189,9 @@ SignalHistory {
 4. **Route management:** save/add sessions to routes, view route segments
 5. **Location history:** tap handler on map, popup with carrier averages
 6. **Activity labels:** utility function mapping dBm → activity level
+7. **Work zones overlay:** toggleable green-shaded layer on map
+8. **Work spots list:** "Find Work Spots" nearby list view
+9. **Review flow:** long-press map → carrier review with rating + comment
 
 ### Data Flow
 
@@ -219,6 +222,80 @@ Aggregation Worker (every 15 min)
 
 ---
 
+## 7. Work Spots — Find Places with Strong Signal
+
+For remote workers, VAs, and freelancers who need reliable mobile data to work from malls, cafes, parks, or co-working spaces.
+
+### Auto-Detected Work Zones
+
+The aggregation worker identifies areas where signal is consistently strong (avg dBm ≥ -75) across multiple readings. These appear as a "Work Zones" overlay on the map — green-shaded areas where data is reliable enough for video calls, browsing, and working.
+
+**WorkZone data model (pre-computed by worker):**
+
+```
+WorkZone {
+  _id: ObjectId
+  gridCell: { sw: [lng, lat], ne: [lng, lat] }
+  carriers: [{
+    carrier: String
+    avgDbm: Number
+    sampleCount: Number
+    activityLevel: String
+  }]
+  bestCarrier: String
+  bestAvgDbm: Number
+  lastUpdated: Date
+}
+```
+
+**Detection criteria:** Grid cell has ≥ 10 signal readings with avg dBm ≥ -75 from at least 2 different time periods.
+
+### User Reviews (Carrier-Specific)
+
+Users can tag any location with a carrier-specific review:
+
+**WorkSpotReview data model:**
+
+```
+WorkSpotReview {
+  _id: ObjectId
+  location: { type: "Point", coordinates: [lng, lat] }
+  deviceId: String
+  carrier: String
+  rating: String ("strong" | "ok" | "weak" | "dead")
+  comment: String (max 200 chars, e.g., "GOMO malakas dito, walang drops")
+  timestamp: Date
+  synced: Boolean
+}
+```
+
+**Examples:**
+- "Malakas ang GOMO sa area na to" → carrier: GOMO, rating: strong
+- "Smart not recommended sa area na to" → carrier: Smart, rating: weak
+
+### UI
+
+**Map overlay:** Toggle "Work Zones" layer — shows green-shaded areas with strong signal. Each zone shows the best carrier.
+
+**Nearby list:** "Find Work Spots" button — lists nearby work zones sorted by signal strength, showing:
+- Area name (auto: nearest landmark or "Zone near [street]")
+- Best carrier + avg dBm + activity level
+- Number of user reviews
+- Top review snippet
+
+**Review flow:** Long-press a spot on map → "Review Signal Here" → pick carrier → rate (strong/ok/weak/dead) → optional comment → submit
+
+### API
+
+```
+GET    /api/workzones          — Query work zones by viewport bounds
+GET    /api/workzones/nearby   — Find nearest work zones (lng, lat, radius)
+POST   /api/reviews            — Submit a carrier-specific review
+GET    /api/reviews            — Query reviews by viewport bounds
+```
+
+---
+
 ## What's NOT in Phase 2a
 
 - Auto-detection of repeated routes (future)
@@ -240,3 +317,6 @@ Aggregation Worker (every 15 min)
 | Session trail API | Integration test: query logs by session time range |
 | Map trail rendering | Manual test on device: verify polyline color-coding |
 | Route UI | Manual test: save route, add sessions, verify segment updates |
+| Work zone detection | Integration test: insert strong-signal logs, run worker, verify WorkZone created |
+| Review submit/query | Integration test: create review, query by bounds, verify carrier filter |
+| Work zones overlay | Manual test on device: verify green zones appear on map |
