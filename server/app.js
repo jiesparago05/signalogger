@@ -7,6 +7,7 @@ const reportsRouter = require('./routes/reports');
 const heatmapRouter = require('./routes/heatmap');
 const carriersRouter = require('./routes/carriers');
 const exportRouter = require('./routes/export');
+const sessionsRouter = require('./routes/sessions');
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/heatmap', heatmapRouter);
 app.use('/api/carriers', carriersRouter);
 app.use('/api/export', exportRouter);
+app.use('/api/sessions', sessionsRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
