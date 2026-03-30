@@ -57,12 +57,15 @@ export async function syncNow(
 
   try {
     const { signals, reports } = await getUnsynced();
+    console.log(`[Sync] Found ${signals.length} signals, ${reports.length} reports to sync`);
     updateStatus({ pendingSignals: signals.length, pendingReports: reports.length });
 
     // Sync signal logs in batches
     for (let i = 0; i < signals.length; i += SYNC_CONFIG.maxBatchSize) {
       const batch = signals.slice(i, i + SYNC_CONFIG.maxBatchSize);
-      await api.signals.uploadBatch(batch);
+      // Strip local _id — let MongoDB generate its own
+      const cleanBatch = batch.map(({ _id, synced, ...rest }) => rest);
+      await api.signals.uploadBatch(cleanBatch as any);
       const ids = batch.map((s) => s._id!).filter(Boolean);
       await markSynced('signal', ids);
       updateStatus({ pendingSignals: signals.length - (i + batch.length) });
