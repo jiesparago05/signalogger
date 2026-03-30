@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SignalLog, ManualReport } from '../../../types/signal';
+import { SignalLog, ManualReport, WorkSpotReview } from '../../../types/signal';
 
 const SIGNAL_KEY = '@signalog/signal_queue';
 const REPORT_KEY = '@signalog/report_queue';
+const REVIEW_KEY = '@signalog/review_queue';
 
 let signalCache: SignalLog[] | null = null;
 let reportCache: ManualReport[] | null = null;
+let reviewCache: WorkSpotReview[] | null = null;
 
 // --- Signal logs ---
 
@@ -61,30 +63,62 @@ export async function addReport(report: ManualReport): Promise<void> {
   await saveReports(reports);
 }
 
+// --- Work spot reviews ---
+
+async function loadReviews(): Promise<WorkSpotReview[]> {
+  if (reviewCache) return reviewCache;
+  const raw = await AsyncStorage.getItem(REVIEW_KEY);
+  reviewCache = raw ? JSON.parse(raw) : [];
+  return reviewCache!;
+}
+
+async function saveReviews(reviews: WorkSpotReview[]): Promise<void> {
+  reviewCache = reviews;
+  await AsyncStorage.setItem(REVIEW_KEY, JSON.stringify(reviews));
+}
+
+export async function addReview(review: WorkSpotReview): Promise<void> {
+  const reviews = await loadReviews();
+  const reviewWithId: WorkSpotReview = {
+    ...review,
+    _id: review._id || `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  };
+  reviews.push(reviewWithId);
+  await saveReviews(reviews);
+}
+
 // --- Sync interface (used by sync-service) ---
 
-export async function getUnsynced(): Promise<{ signals: SignalLog[]; reports: ManualReport[] }> {
+export async function getUnsynced(): Promise<{ signals: SignalLog[]; reports: ManualReport[]; reviews: WorkSpotReview[] }> {
   const signals = await loadSignals();
   const reports = await loadReports();
+  const reviews = await loadReviews();
   return {
     signals: signals.filter((s) => !s.synced),
     reports: reports.filter((r) => !r.synced),
+    reviews: reviews.filter((r) => !r.synced),
   };
 }
 
-export async function markSynced(type: 'signal' | 'report', ids: string[]): Promise<void> {
+export async function markSynced(type: 'signal' | 'report' | 'review', ids: string[]): Promise<void> {
   if (type === 'signal') {
     const signals = await loadSignals();
     const updated = signals.map((s) =>
       ids.includes(s._id!) ? { ...s, synced: true } : s,
     );
     await saveSignals(updated);
-  } else {
+  } else if (type === 'report') {
     const reports = await loadReports();
     const updated = reports.map((r) =>
       ids.includes(r._id!) ? { ...r, synced: true } : r,
     );
     await saveReports(updated);
+  } else {
+    const reviews = await loadReviews();
+    const updated = reviews.map((r) =>
+      ids.includes(r._id!) ? { ...r, synced: true } : r,
+    );
+    await saveReviews(updated);
   }
 }
 

@@ -1,10 +1,10 @@
 import NetInfo from '@react-native-community/netinfo';
 import { api } from '../../../lib/api/client';
 import { SYNC_CONFIG } from '../../../lib/config';
-import { SignalLog, ManualReport } from '../../../types/signal';
+import { SignalLog, ManualReport, WorkSpotReview } from '../../../types/signal';
 
-type GetUnsyncedFn = () => Promise<{ signals: SignalLog[]; reports: ManualReport[] }>;
-type MarkSyncedFn = (type: 'signal' | 'report', ids: string[]) => Promise<void>;
+type GetUnsyncedFn = () => Promise<{ signals: SignalLog[]; reports: ManualReport[]; reviews: WorkSpotReview[] }>;
+type MarkSyncedFn = (type: 'signal' | 'report' | 'review', ids: string[]) => Promise<void>;
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let isSyncing = false;
@@ -56,8 +56,8 @@ export async function syncNow(
   updateStatus({ isSyncing: true, lastError: null });
 
   try {
-    const { signals, reports } = await getUnsynced();
-    console.log(`[Sync] Found ${signals.length} signals, ${reports.length} reports to sync`);
+    const { signals, reports, reviews } = await getUnsynced();
+    console.log(`[Sync] Found ${signals.length} signals, ${reports.length} reports, ${reviews.length} reviews to sync`);
     updateStatus({ pendingSignals: signals.length, pendingReports: reports.length });
 
     // Sync signal logs in batches
@@ -86,6 +86,13 @@ export async function syncNow(
 
       await markSynced('report', [report._id!]);
       updateStatus({ pendingReports: syncStatus.pendingReports - 1 });
+    }
+
+    // Sync reviews
+    for (const review of reviews) {
+      const { _id: localId, synced: _synced, ...cleanReview } = review;
+      await api.workzones.createReview(cleanReview as any);
+      await markSynced('review', [review._id!]);
     }
 
     currentBackoff = SYNC_CONFIG.backoff.initialMs;
