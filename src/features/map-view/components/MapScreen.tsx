@@ -7,6 +7,7 @@ import { ReportModal } from '../../manual-report/components/ReportModal';
 import { useMapData } from '../hooks/use-map-data';
 import { useFilters } from '../hooks/use-filters';
 import { useSignalLogger } from '../../signal-logging/hooks/use-signal-logger';
+import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
@@ -127,9 +128,11 @@ export function MapScreen() {
   const { signals, heatmapTiles, fetchData } = useMapData();
   const { status: syncStatus } = useSync();
 
+  const { activeSession, startSession, addLog, completeSession } = useSession();
+
   const handleNewLog = useCallback((log: SignalLog) => {
-    console.log('New signal log:', log.signal.dbm, log.carrier);
-  }, []);
+    addLog(log);
+  }, [addLog]);
 
   const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog);
 
@@ -190,9 +193,21 @@ export function MapScreen() {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      await toggle();
-      // Small delay before centering to let background service start
-      if (!isActive) {
+      if (isActive) {
+        await toggle();
+        const completed = await completeSession();
+        if (completed) {
+          Alert.alert(
+            'Session Complete',
+            `${completed.logCount} logs \u00B7 ${completed.distanceMeters}m \u00B7 avg ${completed.avgDbm} dBm`,
+            [{ text: 'OK' }],
+          );
+        }
+      } else {
+        const carrier = currentSignal?.carrier || 'Unknown';
+        const networkType = currentSignal?.networkType || 'none';
+        await startSession(carrier, networkType);
+        await toggle();
         setTimeout(() => centerOnUser(), 1500);
       }
     } catch (err) {
@@ -200,7 +215,7 @@ export function MapScreen() {
     } finally {
       setTimeout(() => { busyRef.current = false; }, 2000);
     }
-  }, [toggle, isActive, centerOnUser]);
+  }, [toggle, isActive, currentSignal, startSession, completeSession, centerOnUser]);
 
   const handleWebViewMessage = useCallback(
     (event: any) => {
