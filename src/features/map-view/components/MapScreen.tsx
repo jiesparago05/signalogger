@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Dimensions } from 'react-native';
+import { SwipeableSheet } from './SwipeableSheet';
 import { WebView } from 'react-native-webview';
 import { FilterChips } from './FilterChips';
 import { SignalDisplay } from '../../signal-logging/components/SignalDisplay';
@@ -15,6 +16,7 @@ import { useSync } from '../../offline-sync/hooks/use-sync';
 import { addReport } from '../../offline-sync/services/log-store';
 import { getDeviceId } from '../../../lib/config/device';
 import { Alert, ScrollView } from 'react-native';
+import { DraggableButtonGroup } from './DraggableButton';
 import { SessionsList } from '../../sessions/components/SessionsList';
 import { SessionDetail } from '../../sessions/components/SessionDetail';
 import { RoutesList } from '../../routes/components/RoutesList';
@@ -332,25 +334,19 @@ export function MapScreen() {
         onToggleNetworkType={toggleNetworkType}
       />
 
-      {/* Locate button */}
-      <View
-        style={styles.locateBtn}
-        onTouchEnd={() => centerOnUser()}
-      >
-        <Text style={styles.locateBtnText}>{'\u25CE'}</Text>
-      </View>
-
-      {/* Report button */}
-      <View
-        style={styles.reportBtn}
-        onTouchEnd={() => setReportVisible(true)}
-      >
-        <Text style={styles.reportBtnText}>{'\u26A0\uFE0F'}</Text>
-      </View>
+      {/* Draggable button group */}
+      <DraggableButtonGroup
+        actions={[
+          { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
+          { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
+        ]}
+      />
 
       {/* Bottom sheet */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.handle} />
+      <SwipeableSheet
+        collapsedHeight={120}
+        expandedHeight={Math.round(Dimensions.get('window').height * 0.42)}
+      >
 
         {/* Tab bar */}
         <View style={styles.tabBar}>
@@ -395,7 +391,7 @@ export function MapScreen() {
             <RoutesList onSelectRoute={(r) => setSelectedRoute(r)} />
           </View>
         )}
-      </View>
+      </SwipeableSheet>
 
       {/* Session detail overlay */}
       {selectedSession && (
@@ -432,69 +428,6 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
-  },
-  locateBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 310,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-  },
-  locateBtnText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-  },
-  reportBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 256,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-  },
-  reportBtnText: {
-    fontSize: 18,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(17, 24, 39, 0.95)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
   },
   tabBar: {
     flexDirection: 'row',
