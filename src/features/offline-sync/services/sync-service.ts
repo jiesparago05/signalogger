@@ -45,14 +45,14 @@ export async function syncNow(
   markSynced: MarkSyncedFn,
 ): Promise<void> {
   if (isSyncing) return;
+  isSyncing = true;
 
   const netState = await NetInfo.fetch();
   if (!netState.isConnected) {
+    isSyncing = false;
     updateStatus({ lastError: 'No connection' });
     return;
   }
-
-  isSyncing = true;
   updateStatus({ isSyncing: true, lastError: null });
 
   try {

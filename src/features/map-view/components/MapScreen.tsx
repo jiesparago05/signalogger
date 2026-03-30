@@ -252,8 +252,11 @@ export function MapScreen() {
     updateOverlays();
   }, [updateOverlays]);
 
+  const reportBusyRef = useRef(false);
   const handleReportSubmit = useCallback(
     async (data: { category: any; note: string; attachments: any[] }) => {
+      if (reportBusyRef.current) return;
+      reportBusyRef.current = true;
       try {
         const [location, deviceId] = await Promise.all([
           getCurrentLocation().catch(() => ({
@@ -280,6 +283,8 @@ export function MapScreen() {
       } catch (err) {
         console.warn('Report submit error:', err);
         Alert.alert('Error', 'Failed to save report. Please try again.');
+      } finally {
+        setTimeout(() => { reportBusyRef.current = false; }, 3000);
       }
     },
     [currentSignal],
