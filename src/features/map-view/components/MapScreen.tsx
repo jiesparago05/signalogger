@@ -11,6 +11,9 @@ import { getSignalColor } from '../../../lib/config';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
 import { useSync } from '../../offline-sync/hooks/use-sync';
+import { addReport } from '../../offline-sync/services/log-store';
+import { getDeviceId } from '../../../lib/config/device';
+import { Alert } from 'react-native';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -250,10 +253,36 @@ export function MapScreen() {
   }, [updateOverlays]);
 
   const handleReportSubmit = useCallback(
-    (data: any) => {
-      console.log('Report submitted:', data);
+    async (data: { category: any; note: string; attachments: any[] }) => {
+      try {
+        const [location, deviceId] = await Promise.all([
+          getCurrentLocation().catch(() => ({
+            type: 'Point' as const,
+            coordinates: [0, 0] as [number, number],
+            accuracy: 0,
+          })),
+          getDeviceId(),
+        ]);
+
+        await addReport({
+          timestamp: new Date(),
+          location: { type: 'Point', coordinates: location.coordinates },
+          carrier: currentSignal?.carrier || 'Unknown',
+          networkType: currentSignal?.networkType || 'none',
+          category: data.category,
+          note: data.note,
+          attachments: data.attachments,
+          deviceId,
+          synced: false,
+        });
+
+        Alert.alert('Report Submitted', 'Your signal report has been saved and will sync when connected.');
+      } catch (err) {
+        console.warn('Report submit error:', err);
+        Alert.alert('Error', 'Failed to save report. Please try again.');
+      }
     },
-    [],
+    [currentSignal],
   );
 
   return (

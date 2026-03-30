@@ -73,7 +73,8 @@ export async function syncNow(
 
     // Sync reports one by one (they may have attachments)
     for (const report of reports) {
-      const created = await api.reports.create(report);
+      const { _id: localId, synced: _synced, ...cleanReport } = report;
+      const created = await api.reports.create(cleanReport as any);
 
       // Upload attachments if any
       for (const attachment of report.attachments) {
