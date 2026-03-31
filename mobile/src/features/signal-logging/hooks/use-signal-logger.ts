@@ -48,6 +48,9 @@ export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
 
   useEffect(() => {
     setOnLog(async (log: SignalLog) => {
+      // Skip invalid readings (location off)
+      if (log.signal.dbm <= -999) return;
+
       // Save to offline queue
       await addSignalLog(log);
 

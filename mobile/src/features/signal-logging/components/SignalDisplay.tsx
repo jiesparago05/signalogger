@@ -33,13 +33,17 @@ export function SignalDisplay({ signal, isLogging, stability, compact }: SignalD
     );
   }
 
-  const color = getSignalColor(signal.signal.dbm);
-  const level = signalLevelLabel(signal.signal.dbm);
+  const isInvalid = signal.signal.dbm <= -999;
+  const color = isInvalid ? '#9CA3AF' : getSignalColor(signal.signal.dbm);
+  const level = isInvalid ? 'Location Off' : signalLevelLabel(signal.signal.dbm);
+  const displayDbm = isInvalid ? '--' : String(signal.signal.dbm);
 
   if (compact) {
-    const rangeText = stability
-      ? `${stability.min} to ${stability.max}`
-      : `${signal.signal.dbm} to ${signal.signal.dbm}`;
+    const rangeText = isInvalid
+      ? 'Turn on location to read signal'
+      : stability
+        ? `${stability.min} to ${stability.max}`
+        : `${displayDbm} to ${displayDbm}`;
     const stabilityColor = stability
       ? STABILITY_COLORS[stability.label]
       : '#9CA3AF';
@@ -51,7 +55,7 @@ export function SignalDisplay({ signal, isLogging, stability, compact }: SignalD
       <View style={styles.heroContainer}>
         <View style={styles.heroTop}>
           <View style={styles.heroSignal}>
-            <Text style={[styles.heroDbm, { color }]}>{signal.signal.dbm}</Text>
+            <Text style={[styles.heroDbm, { color }]}>{displayDbm}</Text>
             <Text style={styles.heroUnit}>dBm</Text>
           </View>
           {isLogging && (
@@ -81,7 +85,7 @@ export function SignalDisplay({ signal, isLogging, stability, compact }: SignalD
   return (
     <View style={styles.container}>
       <View style={[styles.circle, { borderColor: color }]}>
-        <Text style={[styles.dbm, { color }]}>{signal.signal.dbm}</Text>
+        <Text style={[styles.dbm, { color }]}>{displayDbm}</Text>
         <Text style={styles.unit}>dBm</Text>
       </View>
       <Text style={[styles.level, { color }]}>{level}</Text>
