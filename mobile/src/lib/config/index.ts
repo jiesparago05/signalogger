@@ -1,7 +1,7 @@
 import { LoggingConfig, Carrier, NetworkType, ReportCategory } from '../../types/signal';
 
 export const API_BASE_URL = __DEV__
-  ? 'http://10.0.2.2:3000/api' // Android emulator → host machine
+  ? 'http://localhost:3000/api' // Real device via adb reverse
   : 'https://api.signalog.app/api'; // production (placeholder)
 
 export const CARRIERS: Carrier[] = ['Smart', 'Globe', 'TNT', 'GOMO', 'Sun', 'DITO'];
@@ -43,8 +43,8 @@ export const SIGNAL_STRENGTH = {
   excellent: -65,
   good: -75,
   moderate: -85,
-  weak: -95,
-  // anything below -95 is dead/no signal
+  weak: -105,
+  // anything below -105 is dead/no signal
 };
 
 export const SIGNAL_COLORS = {

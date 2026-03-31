@@ -22,7 +22,7 @@ export function SessionDetail({ session, onBack, onDrawTrail, onClearTrail, onSa
         const res = await api.sessions.getTrail(session._id!);
         const trailPoints = (res.data || []).map((log: any) => {
           const [lng, lat] = log.location.coordinates;
-          return { lat, lng, color: getSignalColor(log.signal.dbm) };
+          return { lat, lng, color: '#3B82F6' }; // Blue trail — distinct from signal heatmap
         });
         onDrawTrail(trailPoints);
       } catch (err) {

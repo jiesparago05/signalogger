@@ -109,15 +109,34 @@ const LEAFLET_HTML = `
       clearSessionTrail();
       if (!trailData || trailData.length < 2) return;
 
-      // Draw color-coded polyline segments
+      // Group consecutive points with same color into single polylines
+      var currentColor = trailData[0].color;
+      var currentPoints = [[trailData[0].lat, trailData[0].lng]];
+
       for (var i = 1; i < trailData.length; i++) {
-        var prev = trailData[i-1];
-        var curr = trailData[i];
-        var line = L.polyline(
-          [[prev.lat, prev.lng], [curr.lat, curr.lng]],
-          { color: curr.color, weight: 5, opacity: 0.8 }
-        ).addTo(map);
-        sessionPolylines.push(line);
+        var p = trailData[i];
+        if (p.color !== currentColor) {
+          // Finish current segment (include this point for seamless join)
+          currentPoints.push([p.lat, p.lng]);
+          var line = L.polyline(currentPoints, {
+            color: currentColor, weight: 6, opacity: 0.9,
+            lineCap: 'round', lineJoin: 'round'
+          }).addTo(map);
+          sessionPolylines.push(line);
+          // Start new segment from this point
+          currentColor = p.color;
+          currentPoints = [[p.lat, p.lng]];
+        } else {
+          currentPoints.push([p.lat, p.lng]);
+        }
+      }
+      // Draw last segment
+      if (currentPoints.length >= 2) {
+        var lastLine = L.polyline(currentPoints, {
+          color: currentColor, weight: 6, opacity: 0.9,
+          lineCap: 'round', lineJoin: 'round'
+        }).addTo(map);
+        sessionPolylines.push(lastLine);
       }
 
       // Start marker (green)
@@ -193,6 +212,7 @@ export function MapScreen() {
   const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
   const [compareMode, setCompareMode] = useState(false);
+  const [heatmapVisible, setHeatmapVisible] = useState(false);
   const [sheetHeight, setSheetHeight] = useState(Math.round(Dimensions.get('window').height * 0.42));
   const [completedSession, setCompletedSession] = useState<MappingSession | null>(null);
   const [compareVisible, setCompareVisible] = useState(false);
@@ -322,20 +342,22 @@ export function MapScreen() {
 
     let js = 'clearOverlays();';
 
-    signals.forEach((sig) => {
-      const color = getSignalColor(sig.signal.dbm);
-      js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
-    });
+    if (heatmapVisible) {
+      signals.forEach((sig) => {
+        const color = getSignalColor(sig.signal.dbm);
+        js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
+      });
 
-    heatmapTiles.forEach((tile) => {
-      const color = getSignalColor(tile.avgDbm);
-      const lat = (tile.swLat + tile.neLat) / 2;
-      const lng = (tile.swLng + tile.neLng) / 2;
-      js += `addHeatCircle(${lat},${lng},300,'${color}');`;
-    });
+      heatmapTiles.forEach((tile) => {
+        const color = getSignalColor(tile.avgDbm);
+        const lat = (tile.swLat + tile.neLat) / 2;
+        const lng = (tile.swLng + tile.neLng) / 2;
+        js += `addHeatCircle(${lat},${lng},300,'${color}');`;
+      });
+    }
 
     webViewRef.current.injectJavaScript(js + 'true;');
-  }, [signals, heatmapTiles]);
+  }, [signals, heatmapTiles, heatmapVisible]);
 
   // Update overlays when data changes
   React.useEffect(() => {
@@ -404,15 +426,18 @@ export function MapScreen() {
         }}
       />
 
-      {/* Draggable button group */}
-      <DraggableButtonGroup
-        sheetHeight={sheetHeight}
-        actions={[
-          { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
-          { icon: '\uD83D\uDCCA', iconSize: 18, onPress: () => setCompareMode((prev: boolean) => !prev), active: compareMode },
-          { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
-        ]}
-      />
+      {/* Draggable button group — hide when session or route detail is open */}
+      {!selectedSession && !selectedRoute && (
+        <DraggableButtonGroup
+          sheetHeight={sheetHeight}
+          actions={[
+            { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
+            { icon: '\uD83D\uDCCA', iconSize: 18, onPress: () => setCompareMode((prev: boolean) => !prev), active: compareMode },
+            { icon: '\uD83D\uDD25', iconSize: 18, onPress: () => setHeatmapVisible((prev: boolean) => !prev), active: heatmapVisible },
+            { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
+          ]}
+        />
+      )}
 
       {/* Bottom sheet */}
       <SwipeableSheet
@@ -606,7 +631,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: '55%',
+    height: Math.round(Dimensions.get('window').height * 0.55),
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',

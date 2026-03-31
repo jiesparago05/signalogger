@@ -63,11 +63,12 @@ async function compareRoute(routeId) {
   return { ranking, segments, totalDataPoints };
 }
 
-async function compareLocation(lng, lat, radiusMeters, days) {
-  const radiusDeg = radiusMeters / 111000;
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+const MIN_DATA_POINTS = 5;
+const RADIUS_STEPS = [100, 200, 300];
 
-  const results = await SignalHistory.aggregate([
+async function queryAtRadius(lng, lat, radiusMeters, since) {
+  const radiusDeg = radiusMeters / 111000;
+  return SignalHistory.aggregate([
     {
       $match: {
         swLng: { $lte: lng + radiusDeg },
@@ -86,11 +87,31 @@ async function compareLocation(lng, lat, radiusMeters, days) {
     },
     { $sort: { avgDbm: -1 } },
   ]);
+}
 
-  return results.map((r) => {
+async function compareLocation(lng, lat, radiusMeters, days) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  // Adaptive radius: start small, expand if not enough data
+  const steps = RADIUS_STEPS.filter((r) => r <= radiusMeters);
+  if (!steps.includes(radiusMeters)) steps.push(radiusMeters);
+
+  let results = [];
+  let usedRadius = radiusMeters;
+
+  for (const radius of steps) {
+    results = await queryAtRadius(lng, lat, radius, since);
+    usedRadius = radius;
+    const totalSamples = results.reduce((s, r) => s + r.sampleCount, 0);
+    if (totalSamples >= MIN_DATA_POINTS) break;
+  }
+
+  const data = results.map((r) => {
     const avgDbm = Math.round(r.avgDbm);
     return { carrier: r._id, avgDbm, activityLevel: getActivityLevel(avgDbm), sampleCount: r.sampleCount };
   });
+
+  return { data, usedRadius };
 }
 
 module.exports = { compareRoute, compareLocation };
