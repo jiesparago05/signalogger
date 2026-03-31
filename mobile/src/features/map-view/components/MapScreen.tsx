@@ -212,7 +212,7 @@ export function MapScreen() {
   const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
   const [compareMode, setCompareMode] = useState(false);
-  const [heatmapVisible, setHeatmapVisible] = useState(false);
+  const [heatmapVisible, setHeatmapVisible] = useState(true);
   const [sheetHeight, setSheetHeight] = useState(Math.round(Dimensions.get('window').height * 0.42));
   const [completedSession, setCompletedSession] = useState<MappingSession | null>(null);
   const [compareVisible, setCompareVisible] = useState(false);
@@ -342,12 +342,15 @@ export function MapScreen() {
 
     let js = 'clearOverlays();';
 
+    // Heatmap toggle is the master switch — OFF = clean map
     if (heatmapVisible) {
+      // Show signal dots (respects carrier/network filters)
       signals.forEach((sig) => {
         const color = getSignalColor(sig.signal.dbm);
         js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
       });
 
+      // Show heat circles
       heatmapTiles.forEach((tile) => {
         const color = getSignalColor(tile.avgDbm);
         const lat = (tile.swLat + tile.neLat) / 2;
