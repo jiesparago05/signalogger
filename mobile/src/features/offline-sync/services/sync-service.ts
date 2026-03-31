@@ -1,10 +1,10 @@
 import NetInfo from '@react-native-community/netinfo';
 import { api } from '../../../lib/api/client';
 import { SYNC_CONFIG } from '../../../lib/config';
-import { SignalLog, ManualReport } from '../../../types/signal';
+import { SignalLog, ManualReport, WorkSpotReview } from '../../../types/signal';
 
-type GetUnsyncedFn = () => Promise<{ signals: SignalLog[]; reports: ManualReport[] }>;
-type MarkSyncedFn = (type: 'signal' | 'report', ids: string[]) => Promise<void>;
+type GetUnsyncedFn = () => Promise<{ signals: SignalLog[]; reports: ManualReport[]; reviews: WorkSpotReview[] }>;
+type MarkSyncedFn = (type: 'signal' | 'report' | 'review', ids: string[]) => Promise<void>;
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let isSyncing = false;
@@ -45,24 +45,27 @@ export async function syncNow(
   markSynced: MarkSyncedFn,
 ): Promise<void> {
   if (isSyncing) return;
+  isSyncing = true;
 
   const netState = await NetInfo.fetch();
   if (!netState.isConnected) {
+    isSyncing = false;
     updateStatus({ lastError: 'No connection' });
     return;
   }
-
-  isSyncing = true;
   updateStatus({ isSyncing: true, lastError: null });
 
   try {
-    const { signals, reports } = await getUnsynced();
+    const { signals, reports, reviews } = await getUnsynced();
+    console.log(`[Sync] Found ${signals.length} signals, ${reports.length} reports, ${reviews.length} reviews to sync`);
     updateStatus({ pendingSignals: signals.length, pendingReports: reports.length });
 
     // Sync signal logs in batches
     for (let i = 0; i < signals.length; i += SYNC_CONFIG.maxBatchSize) {
       const batch = signals.slice(i, i + SYNC_CONFIG.maxBatchSize);
-      await api.signals.uploadBatch(batch);
+      // Strip local _id — let MongoDB generate its own
+      const cleanBatch = batch.map(({ _id, synced, ...rest }) => rest);
+      await api.signals.uploadBatch(cleanBatch as any);
       const ids = batch.map((s) => s._id!).filter(Boolean);
       await markSynced('signal', ids);
       updateStatus({ pendingSignals: signals.length - (i + batch.length) });
@@ -70,7 +73,8 @@ export async function syncNow(
 
     // Sync reports one by one (they may have attachments)
     for (const report of reports) {
-      const created = await api.reports.create(report);
+      const { _id: localId, synced: _synced, ...cleanReport } = report;
+      const created = await api.reports.create(cleanReport as any);
 
       // Upload attachments if any
       for (const attachment of report.attachments) {
@@ -82,6 +86,13 @@ export async function syncNow(
 
       await markSynced('report', [report._id!]);
       updateStatus({ pendingReports: syncStatus.pendingReports - 1 });
+    }
+
+    // Sync reviews
+    for (const review of reviews) {
+      const { _id: localId, synced: _synced, ...cleanReview } = review;
+      await api.workzones.createReview(cleanReview as any);
+      await markSynced('review', [review._id!]);
     }
 
     currentBackoff = SYNC_CONFIG.backoff.initialMs;

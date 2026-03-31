@@ -21,12 +21,11 @@ export function useFilters() {
 
   const toggleNetworkType = useCallback((type: NetworkType) => {
     setFilters((prev) => {
-      const exists = prev.networkTypes.includes(type);
+      // Single-select: tap same = deselect, tap different = switch
+      const isSame = prev.networkTypes.length === 1 && prev.networkTypes[0] === type;
       return {
         ...prev,
-        networkTypes: exists
-          ? prev.networkTypes.filter((t) => t !== type)
-          : [...prev.networkTypes, type],
+        networkTypes: isSame ? [] : [type],
       };
     });
   }, []);
