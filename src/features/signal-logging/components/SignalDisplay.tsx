@@ -10,6 +10,7 @@ interface SignalDisplayProps {
   isLogging: boolean;
   stability?: SignalStability | null;
   compact?: boolean;
+  inDeadZone?: boolean;
 }
 
 const STABILITY_COLORS = {
@@ -24,7 +25,7 @@ const STABILITY_ICONS = {
   Unstable: '\u25CF',
 };
 
-export function SignalDisplay({ signal, isLogging, stability, compact }: SignalDisplayProps) {
+export function SignalDisplay({ signal, isLogging, stability, compact, inDeadZone }: SignalDisplayProps) {
   if (!signal) {
     return (
       <View style={styles.heroContainer}>
@@ -34,16 +35,19 @@ export function SignalDisplay({ signal, isLogging, stability, compact }: SignalD
   }
 
   const isInvalid = signal.signal.dbm <= -999;
-  const color = isInvalid ? '#9CA3AF' : getSignalColor(signal.signal.dbm);
-  const level = isInvalid ? 'Location Off' : signalLevelLabel(signal.signal.dbm);
-  const displayDbm = isInvalid ? '--' : String(signal.signal.dbm);
+  const isDead = inDeadZone || isInvalid;
+  const color = isDead ? '#EF4444' : getSignalColor(signal.signal.dbm);
+  const level = inDeadZone ? '\u2620\uFE0F Dead Zone' : isInvalid ? 'Location Off' : signalLevelLabel(signal.signal.dbm);
+  const displayDbm = isDead ? '--' : String(signal.signal.dbm);
 
   if (compact) {
-    const rangeText = isInvalid
-      ? 'Turn on location to read signal'
-      : stability
-        ? `${stability.min} to ${stability.max}`
-        : `${displayDbm} to ${displayDbm}`;
+    const rangeText = inDeadZone
+      ? 'Logging paused \u00B7 Will resume when signal returns'
+      : isInvalid
+        ? 'Turn on location to read signal'
+        : stability
+          ? `${stability.min} to ${stability.max}`
+          : `${displayDbm} to ${displayDbm}`;
     const stabilityColor = stability
       ? STABILITY_COLORS[stability.label]
       : '#9CA3AF';
@@ -66,8 +70,8 @@ export function SignalDisplay({ signal, isLogging, stability, compact }: SignalD
         </View>
         <Text style={[styles.heroLevel, { color }]}>{level}</Text>
         <Text style={styles.heroInfo}>
-          {signal.carrier} {'\u00B7'} {signal.networkType}
-          {signal.connection.ping ? ` ${'\u00B7'} ${formatPing(signal.connection.ping)}` : ''}
+          {signal.carrier} {'\u00B7'} {inDeadZone ? 'No Signal' : signal.networkType}
+          {!isDead && signal.connection.ping ? ` ${'\u00B7'} ${formatPing(signal.connection.ping)}` : ''}
         </Text>
 
         <View style={styles.stabilityRow}>
