@@ -69,6 +69,21 @@ const LEAFLET_HTML = `
       }
     }
 
+    function setUserMarkerDead(isDead) {
+      if (!userMarker) return;
+      var color = isDead ? '#9CA3AF' : '#22C55E';
+      var icon = L.divIcon({
+        className: 'user-location',
+        html: '<div style="position:relative;width:22px;height:22px;">' +
+          '<div style="position:absolute;width:22px;height:22px;border-radius:50%;background:' + color + '40;' + (isDead ? '' : 'animation:pulse 2s infinite;') + '"></div>' +
+          '<div style="position:absolute;top:4px;left:4px;width:14px;height:14px;border-radius:50%;background:' + color + ';border:2.5px solid #F9FAFB;' + (isDead ? 'opacity:0.5;' : '') + '"></div>' +
+          '</div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      userMarker.setIcon(icon);
+    }
+
     // Add pulse animation
     var style = document.createElement('style');
     style.textContent = '@keyframes pulse { 0% { transform:scale(1); opacity:1; } 100% { transform:scale(2.5); opacity:0; } }';
@@ -247,6 +262,14 @@ export function MapScreen() {
     }
   }, [currentSignal, processReading]);
 
+  // Gray out user marker + clear heatmap when in dead zone
+  React.useEffect(() => {
+    webViewRef.current?.injectJavaScript(`setUserMarkerDead(${inDeadZone}); true;`);
+    if (inDeadZone) {
+      webViewRef.current?.injectJavaScript('clearOverlays(); true;');
+    }
+  }, [inDeadZone]);
+
   const updateUserMarker = useCallback((lat: number, lng: number) => {
     webViewRef.current?.injectJavaScript(
       `setUserLocation(${lat},${lng}); true;`,
@@ -358,14 +381,13 @@ export function MapScreen() {
     let js = 'clearOverlays();';
 
     // Heatmap toggle is the master switch — OFF = clean map
-    if (heatmapVisible) {
-      // Show signal dots (respects carrier/network filters)
+    // Don't show heatmap during dead zone
+    if (heatmapVisible && !inDeadZone) {
       signals.forEach((sig) => {
         const color = getSignalColor(sig.signal.dbm);
         js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
       });
 
-      // Show heat circles
       heatmapTiles.forEach((tile) => {
         const color = getSignalColor(tile.avgDbm);
         const lat = (tile.swLat + tile.neLat) / 2;
@@ -375,7 +397,7 @@ export function MapScreen() {
     }
 
     webViewRef.current.injectJavaScript(js + 'true;');
-  }, [signals, heatmapTiles, heatmapVisible]);
+  }, [signals, heatmapTiles, heatmapVisible, inDeadZone]);
 
   // Update overlays when data changes
   React.useEffect(() => {
@@ -432,29 +454,30 @@ export function MapScreen() {
         originWhitelist={['*']}
       />
 
-      {/* Dead zone banner */}
-      <DeadZoneBanner visible={inDeadZone} />
-
-      {/* Filter dropdowns + search */}
-      <FilterChips
-        filters={filters}
-        onToggleCarrier={toggleCarrier}
-        onToggleNetworkType={toggleNetworkType}
-        onSearchSelect={(loc) => {
-          webViewRef.current?.injectJavaScript(
-            `map.setView([${loc.lat},${loc.lng}], 15); true;`,
-          );
-        }}
-      />
+      {/* Dead zone banner replaces filter chips when active */}
+      {inDeadZone ? (
+        <DeadZoneBanner visible={true} />
+      ) : (
+        <FilterChips
+          filters={filters}
+          onToggleCarrier={toggleCarrier}
+          onToggleNetworkType={toggleNetworkType}
+          onSearchSelect={(loc) => {
+            webViewRef.current?.injectJavaScript(
+              `map.setView([${loc.lat},${loc.lng}], 15); true;`,
+            );
+          }}
+        />
+      )}
 
       {/* Draggable button group — hide when session or route detail is open */}
       {!selectedSession && !selectedRoute && (
         <DraggableButtonGroup
           sheetHeight={sheetHeight}
           actions={[
-            { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
-            { icon: '\uD83D\uDCCA', iconSize: 18, onPress: () => setCompareMode((prev: boolean) => !prev), active: compareMode },
-            { icon: '\uD83D\uDD25', iconSize: 18, onPress: () => setHeatmapVisible((prev: boolean) => !prev), active: heatmapVisible },
+            { icon: '\u25CE', iconSize: 20, onPress: inDeadZone ? () => {} : () => centerOnUser(), active: inDeadZone ? false : undefined },
+            { icon: '\uD83D\uDCCA', iconSize: 18, onPress: inDeadZone ? () => {} : () => setCompareMode((prev: boolean) => !prev), active: inDeadZone ? false : compareMode },
+            { icon: '\uD83D\uDD25', iconSize: 18, onPress: inDeadZone ? () => {} : () => setHeatmapVisible((prev: boolean) => !prev), active: inDeadZone ? false : heatmapVisible },
             { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
           ]}
         />
@@ -487,11 +510,11 @@ export function MapScreen() {
           <View>
             <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact inDeadZone={inDeadZone} />
             <View
-              style={[styles.cta, isActive && styles.ctaActive]}
-              onTouchEnd={() => handleToggle()}
+              style={[styles.cta, isActive && styles.ctaActive, (inDeadZone && !isActive) && styles.ctaDisabled]}
+              onTouchEnd={(inDeadZone && !isActive) ? undefined : () => handleToggle()}
             >
-              <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
-                {isActive ? 'Stop Mapping' : 'Start Mapping'}
+              <Text style={[styles.ctaText, isActive && styles.ctaTextActive, (inDeadZone && !isActive) && styles.ctaTextDisabled]}>
+                {isActive ? 'Stop Mapping' : inDeadZone ? 'No Signal' : 'Start Mapping'}
               </Text>
             </View>
           </View>
@@ -646,6 +669,13 @@ const styles = StyleSheet.create({
   },
   ctaTextActive: {
     color: '#EF4444',
+  },
+  ctaDisabled: {
+    backgroundColor: '#374151',
+    opacity: 0.5,
+  },
+  ctaTextDisabled: {
+    color: '#9CA3AF',
   },
   sessionOverlay: {
     position: 'absolute',

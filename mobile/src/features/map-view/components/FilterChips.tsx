@@ -121,6 +121,17 @@ export function FilterChips({ filters, onToggleCarrier, onToggleNetworkType, onS
   };
 
   return (
+    <>
+      {/* Backdrop to catch taps when dropdown is open — prevents map tap-through */}
+      {openMenu && (
+        <View
+          style={styles.backdrop}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            setOpenMenu(null);
+          }}
+        />
+      )}
     <View style={styles.container}>
       {searchActive ? (
         // Search mode: full-width search bar
@@ -221,6 +232,7 @@ export function FilterChips({ filters, onToggleCarrier, onToggleNetworkType, onS
         </View>
       )}
     </View>
+    </>
   );
 }
 
@@ -237,6 +249,14 @@ const chipBase = {
 } as const;
 
 const styles = StyleSheet.create({
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9,
+  },
   container: {
     position: 'absolute',
     top: 48,

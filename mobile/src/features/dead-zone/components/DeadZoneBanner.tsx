@@ -22,16 +22,17 @@ export function DeadZoneBanner({ visible }: DeadZoneBannerProps) {
 const styles = StyleSheet.create({
   banner: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 48,
+    left: 12,
+    right: 12,
     backgroundColor: 'rgba(239, 68, 68, 0.95)',
-    padding: 10,
+    padding: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     zIndex: 100,
+    borderRadius: 20,
   },
   icon: {
     fontSize: 16,

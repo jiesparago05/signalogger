@@ -48,10 +48,7 @@ export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
 
   useEffect(() => {
     setOnLog(async (log: SignalLog) => {
-      // Skip invalid readings (location off)
-      if (log.signal.dbm <= -999) return;
-
-      // Save to offline queue
+      // Save to offline queue (including dead zone readings for location tracking)
       await addSignalLog(log);
 
       // Update UI
@@ -61,7 +58,11 @@ export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
         signal: log.signal,
         connection: log.connection,
       });
-      addToHistory(log.signal.dbm);
+
+      // Only add valid readings to stability history
+      if (log.signal.dbm > -999) {
+        addToHistory(log.signal.dbm);
+      }
       onNewLog?.(log);
     });
   }, [onNewLog, addToHistory]);

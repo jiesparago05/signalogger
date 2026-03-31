@@ -34,24 +34,24 @@ export function SignalDisplay({ signal, isLogging, stability, compact, inDeadZon
     );
   }
 
-  const isInvalid = signal.signal.dbm <= -999;
-  const isDead = inDeadZone || isInvalid;
-  const color = isDead ? '#EF4444' : getSignalColor(signal.signal.dbm);
-  const level = inDeadZone ? '\u2620\uFE0F Dead Zone' : isInvalid ? 'Location Off' : signalLevelLabel(signal.signal.dbm);
-  const displayDbm = isDead ? '--' : String(signal.signal.dbm);
+  const isReading = signal.signal.dbm <= -999 && signal.networkType !== 'none';
+  const isDead = inDeadZone;
+  const color = isDead ? '#EF4444' : isReading ? '#9CA3AF' : getSignalColor(signal.signal.dbm);
+  const level = isDead ? '\u2620\uFE0F Dead Zone' : isReading ? 'Reading signal...' : signalLevelLabel(signal.signal.dbm);
+  const displayDbm = (isDead || isReading) ? '--' : String(signal.signal.dbm);
 
   if (compact) {
-    const rangeText = inDeadZone
-      ? 'Logging paused \u00B7 Will resume when signal returns'
-      : isInvalid
-        ? 'Turn on location to read signal'
+    const rangeText = isDead
+      ? 'No signal available in this area'
+      : isReading
+        ? 'Waiting for signal data...'
         : stability
           ? `${stability.min} to ${stability.max}`
           : `${displayDbm} to ${displayDbm}`;
-    const stabilityColor = stability
+    const stabilityColor = isDead ? '#9CA3AF' : stability
       ? STABILITY_COLORS[stability.label]
       : '#9CA3AF';
-    const stabilityText = stability
+    const stabilityText = (isDead || isReading) ? '' : stability
       ? `${STABILITY_ICONS[stability.label]} ${stability.label}`
       : 'Measuring...';
 

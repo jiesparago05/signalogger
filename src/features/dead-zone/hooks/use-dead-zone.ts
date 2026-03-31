@@ -20,17 +20,22 @@ export function useDeadZone() {
   const wasInDeadZoneRef = useRef(false);
 
   const processReading = useCallback((dbm: number, carrier?: string, networkType?: string) => {
-    // Skip invalid readings (location off) — handled separately by SignalDisplay
-    if (dbm <= -999) return;
+    // Only dead if networkType is 'none' (radio actually off) or signal is genuinely weak
+    // Note: -999 with valid networkType means native module failed to read — NOT a dead zone
+    const radioOff = networkType === 'none';
+    const weakSignal = dbm > -999 && dbm < DEAD_ZONE_THRESHOLD;
+    const isDead = radioOff || weakSignal;
 
-    const isDead = dbm < DEAD_ZONE_THRESHOLD;
+    console.log('[DeadZone]', { dbm, networkType, radioOff, weakSignal, isDead, consecutive: consecutiveDeadRef.current, wasIn: wasInDeadZoneRef.current });
 
     if (isDead) {
       consecutiveDeadRef.current += 1;
 
-      // Check if we should trigger dead zone alert
+      // Always wait for consecutive readings to avoid false triggers on app startup
+      const threshold = DEAD_ZONE_CONSECUTIVE_READINGS;
+
       if (
-        consecutiveDeadRef.current >= DEAD_ZONE_CONSECUTIVE_READINGS &&
+        consecutiveDeadRef.current >= threshold &&
         !wasInDeadZoneRef.current
       ) {
         const now = Date.now();
