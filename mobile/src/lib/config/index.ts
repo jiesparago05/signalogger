@@ -47,6 +47,10 @@ export const SIGNAL_STRENGTH = {
   // anything below -105 is dead/no signal
 };
 
+export const DEAD_ZONE_THRESHOLD = -105; // dBm — below this is dead zone
+export const DEAD_ZONE_CONSECUTIVE_READINGS = 2; // readings before alert
+export const DEAD_ZONE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
 export const SIGNAL_COLORS = {
   excellent: '#22c55e', // green
   good: '#84cc16', // lime
