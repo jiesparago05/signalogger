@@ -23,8 +23,8 @@ import { RoutesList } from '../../routes/components/RoutesList';
 import { RouteDetail } from '../../routes/components/RouteDetail';
 import { MappingSession, CommuteRoute } from '../../../types/signal';
 import { LocationComparison } from '../../comparison/components/LocationComparison';
-import { SearchBar } from '../../comparison/components/SearchBar';
 import { RouteComparison } from '../../comparison/components/RouteComparison';
+import { SaveRouteModal } from '../../sessions/components/SaveRouteModal';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -102,6 +102,54 @@ const LEAFLET_HTML = `
       circles.push(c);
     }
 
+    var sessionPolylines = [];
+    var sessionMarkers = [];
+
+    function drawSessionTrail(trailData) {
+      clearSessionTrail();
+      if (!trailData || trailData.length < 2) return;
+
+      // Draw color-coded polyline segments
+      for (var i = 1; i < trailData.length; i++) {
+        var prev = trailData[i-1];
+        var curr = trailData[i];
+        var line = L.polyline(
+          [[prev.lat, prev.lng], [curr.lat, curr.lng]],
+          { color: curr.color, weight: 5, opacity: 0.8 }
+        ).addTo(map);
+        sessionPolylines.push(line);
+      }
+
+      // Start marker (green)
+      var startM = L.circleMarker(
+        [trailData[0].lat, trailData[0].lng],
+        { radius: 7, fillColor: '#22C55E', fillOpacity: 1, stroke: true, color: '#fff', weight: 3 }
+      ).addTo(map);
+      sessionMarkers.push(startM);
+
+      // End marker (red)
+      var endM = L.circleMarker(
+        [trailData[trailData.length-1].lat, trailData[trailData.length-1].lng],
+        { radius: 7, fillColor: '#EF4444', fillOpacity: 1, stroke: true, color: '#fff', weight: 3 }
+      ).addTo(map);
+      sessionMarkers.push(endM);
+
+      // Fit map bounds to trail
+      var lats = trailData.map(function(p) { return p.lat; });
+      var lngs = trailData.map(function(p) { return p.lng; });
+      map.fitBounds([
+        [Math.min.apply(null, lats) - 0.002, Math.min.apply(null, lngs) - 0.002],
+        [Math.max.apply(null, lats) + 0.002, Math.max.apply(null, lngs) + 0.002]
+      ]);
+    }
+
+    function clearSessionTrail() {
+      sessionPolylines.forEach(function(l) { map.removeLayer(l); });
+      sessionMarkers.forEach(function(m) { map.removeLayer(m); });
+      sessionPolylines = [];
+      sessionMarkers = [];
+    }
+
     map.on('click', function(e) {
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'mapTap',
@@ -144,6 +192,9 @@ export function MapScreen() {
   const [activeTab, setActiveTab] = useState<'live' | 'sessions' | 'routes'>('live');
   const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState(Math.round(Dimensions.get('window').height * 0.42));
+  const [completedSession, setCompletedSession] = useState<MappingSession | null>(null);
   const [compareVisible, setCompareVisible] = useState(false);
   const [compareCoords, setCompareCoords] = useState<[number, number] | null>(null);
   const [routeCompareId, setRouteCompareId] = useState<string | null>(null);
@@ -222,11 +273,7 @@ export function MapScreen() {
         await toggle();
         const completed = await completeSession();
         if (completed) {
-          Alert.alert(
-            'Session Complete',
-            `${completed.logCount} logs \u00B7 ${completed.distanceMeters}m \u00B7 avg ${completed.avgDbm} dBm`,
-            [{ text: 'OK' }],
-          );
+          setCompletedSession(completed);
         }
       } else {
         const carrier = currentSignal?.carrier || 'Unknown';
@@ -253,13 +300,13 @@ export function MapScreen() {
           };
           lastViewport.current = { bounds: viewport, zoom: data.zoom };
           fetchData(viewport, data.zoom, filters);
-        } else if (data.type === 'mapTap') {
+        } else if (data.type === 'mapTap' && compareMode) {
           setCompareCoords([data.lng, data.lat]);
           setCompareVisible(true);
         }
       } catch {}
     },
-    [fetchData, filters],
+    [fetchData, filters, compareMode],
   );
 
   // Refetch when filters change (without needing a map move)
@@ -345,28 +392,24 @@ export function MapScreen() {
         originWhitelist={['*']}
       />
 
-      {/* Filter dropdowns */}
+      {/* Filter dropdowns + search */}
       <FilterChips
         filters={filters}
         onToggleCarrier={toggleCarrier}
         onToggleNetworkType={toggleNetworkType}
-      />
-
-      {/* Search bar */}
-      <SearchBar
-        onSelectLocation={(loc) => {
+        onSearchSelect={(loc) => {
           webViewRef.current?.injectJavaScript(
             `map.setView([${loc.lat},${loc.lng}], 15); true;`,
           );
-          setCompareCoords([loc.lng, loc.lat]);
-          setCompareVisible(true);
         }}
       />
 
       {/* Draggable button group */}
       <DraggableButtonGroup
+        sheetHeight={sheetHeight}
         actions={[
           { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
+          { icon: '\uD83D\uDCCA', iconSize: 18, onPress: () => setCompareMode((prev: boolean) => !prev), active: compareMode },
           { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
         ]}
       />
@@ -375,6 +418,7 @@ export function MapScreen() {
       <SwipeableSheet
         collapsedHeight={120}
         expandedHeight={Math.round(Dimensions.get('window').height * 0.42)}
+        onHeightChange={setSheetHeight}
       >
 
         {/* Tab bar */}
@@ -403,18 +447,6 @@ export function MapScreen() {
               <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
                 {isActive ? 'Stop Mapping' : 'Start Mapping'}
               </Text>
-            </View>
-            <View
-              style={styles.compareBtn}
-              onTouchEnd={async () => {
-                try {
-                  const loc = await getCurrentLocation();
-                  setCompareCoords(loc.coordinates);
-                  setCompareVisible(true);
-                } catch {}
-              }}
-            >
-              <Text style={styles.compareBtnText}>{'\uD83D\uDCCA'} Compare Carriers Here</Text>
             </View>
           </View>
         )}
@@ -469,6 +501,16 @@ export function MapScreen() {
             setRouteCompareId(null);
             setRouteCompareName('');
           }}
+        />
+      )}
+
+      {/* Save route modal after session complete */}
+      {completedSession && (
+        <SaveRouteModal
+          visible={!!completedSession}
+          session={completedSession}
+          onSaved={() => setCompletedSession(null)}
+          onSkip={() => setCompletedSession(null)}
         />
       )}
 
@@ -539,19 +581,5 @@ const styles = StyleSheet.create({
   },
   ctaTextActive: {
     color: '#EF4444',
-  },
-  compareBtn: {
-    backgroundColor: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  compareBtnText: {
-    color: '#F9FAFB',
-    fontSize: 13,
-    fontWeight: '500',
   },
 });

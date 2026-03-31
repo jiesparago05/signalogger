@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, Text, Dimensions } from 'react-native';
+import { SwipeableSheet } from './SwipeableSheet';
 import { WebView } from 'react-native-webview';
 import { FilterChips } from './FilterChips';
 import { SignalDisplay } from '../../signal-logging/components/SignalDisplay';
@@ -7,9 +8,23 @@ import { ReportModal } from '../../manual-report/components/ReportModal';
 import { useMapData } from '../hooks/use-map-data';
 import { useFilters } from '../hooks/use-filters';
 import { useSignalLogger } from '../../signal-logging/hooks/use-signal-logger';
+import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
+import { useSync } from '../../offline-sync/hooks/use-sync';
+import { addReport } from '../../offline-sync/services/log-store';
+import { getDeviceId } from '../../../lib/config/device';
+import { Alert, ScrollView } from 'react-native';
+import { DraggableButtonGroup } from './DraggableButton';
+import { SessionsList } from '../../sessions/components/SessionsList';
+import { SessionDetail } from '../../sessions/components/SessionDetail';
+import { RoutesList } from '../../routes/components/RoutesList';
+import { RouteDetail } from '../../routes/components/RouteDetail';
+import { MappingSession, CommuteRoute } from '../../../types/signal';
+import { LocationComparison } from '../../comparison/components/LocationComparison';
+import { RouteComparison } from '../../comparison/components/RouteComparison';
+import { SaveRouteModal } from '../../sessions/components/SaveRouteModal';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -41,12 +56,12 @@ const LEAFLET_HTML = `
       } else {
         var icon = L.divIcon({
           className: 'user-location',
-          html: '<div style="position:relative;width:20px;height:20px;">' +
-            '<div style="position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(83,52,131,0.3);animation:pulse 2s infinite;"></div>' +
-            '<div style="position:absolute;top:4px;left:4px;width:12px;height:12px;border-radius:50%;background:#533483;border:2px solid #fff;"></div>' +
+          html: '<div style="position:relative;width:22px;height:22px;">' +
+            '<div style="position:absolute;width:22px;height:22px;border-radius:50%;background:rgba(34,197,94,0.25);animation:pulse 2s infinite;"></div>' +
+            '<div style="position:absolute;top:4px;left:4px;width:14px;height:14px;border-radius:50%;background:#22C55E;border:2.5px solid #F9FAFB;"></div>' +
             '</div>',
-          iconSize: [20, 20],
-          iconAnchor: [10, 10],
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
         });
         userMarker = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 }).addTo(map);
       }
@@ -70,8 +85,8 @@ const LEAFLET_HTML = `
     function addMarker(lat, lng, color) {
       var icon = L.divIcon({
         className: 'signal-marker',
-        html: '<div style="width:12px;height:12px;border-radius:50%;background:' + color + ';border:2px solid rgba(255,255,255,0.5);"></div>',
-        iconSize: [12, 12],
+        html: '<div style="width:10px;height:10px;border-radius:50%;background:' + color + ';border:1.5px solid rgba(255,255,255,0.3);box-shadow:0 0 6px ' + color + '44;"></div>',
+        iconSize: [10, 10],
       });
       var m = L.marker([lat, lng], { icon: icon }).addTo(map);
       markers.push(m);
@@ -81,11 +96,67 @@ const LEAFLET_HTML = `
       var c = L.circle([lat, lng], {
         radius: radius,
         fillColor: color,
-        fillOpacity: 0.25,
+        fillOpacity: 0.2,
         stroke: false,
       }).addTo(map);
       circles.push(c);
     }
+
+    var sessionPolylines = [];
+    var sessionMarkers = [];
+
+    function drawSessionTrail(trailData) {
+      clearSessionTrail();
+      if (!trailData || trailData.length < 2) return;
+
+      // Draw color-coded polyline segments
+      for (var i = 1; i < trailData.length; i++) {
+        var prev = trailData[i-1];
+        var curr = trailData[i];
+        var line = L.polyline(
+          [[prev.lat, prev.lng], [curr.lat, curr.lng]],
+          { color: curr.color, weight: 5, opacity: 0.8 }
+        ).addTo(map);
+        sessionPolylines.push(line);
+      }
+
+      // Start marker (green)
+      var startM = L.circleMarker(
+        [trailData[0].lat, trailData[0].lng],
+        { radius: 7, fillColor: '#22C55E', fillOpacity: 1, stroke: true, color: '#fff', weight: 3 }
+      ).addTo(map);
+      sessionMarkers.push(startM);
+
+      // End marker (red)
+      var endM = L.circleMarker(
+        [trailData[trailData.length-1].lat, trailData[trailData.length-1].lng],
+        { radius: 7, fillColor: '#EF4444', fillOpacity: 1, stroke: true, color: '#fff', weight: 3 }
+      ).addTo(map);
+      sessionMarkers.push(endM);
+
+      // Fit map bounds to trail
+      var lats = trailData.map(function(p) { return p.lat; });
+      var lngs = trailData.map(function(p) { return p.lng; });
+      map.fitBounds([
+        [Math.min.apply(null, lats) - 0.002, Math.min.apply(null, lngs) - 0.002],
+        [Math.max.apply(null, lats) + 0.002, Math.max.apply(null, lngs) + 0.002]
+      ]);
+    }
+
+    function clearSessionTrail() {
+      sessionPolylines.forEach(function(l) { map.removeLayer(l); });
+      sessionMarkers.forEach(function(m) { map.removeLayer(m); });
+      sessionPolylines = [];
+      sessionMarkers = [];
+    }
+
+    map.on('click', function(e) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'mapTap',
+        lng: e.latlng.lng,
+        lat: e.latlng.lat,
+      }));
+    });
 
     map.on('moveend', function() {
       var bounds = map.getBounds();
@@ -115,16 +186,31 @@ const LEAFLET_HTML = `
 
 export function MapScreen() {
   const webViewRef = useRef<WebView>(null);
+  const lastViewport = useRef<{ bounds: ViewportBounds; zoom: number } | null>(null);
+  const busyRef = useRef(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'sessions' | 'routes'>('live');
+  const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState(Math.round(Dimensions.get('window').height * 0.42));
+  const [completedSession, setCompletedSession] = useState<MappingSession | null>(null);
+  const [compareVisible, setCompareVisible] = useState(false);
+  const [compareCoords, setCompareCoords] = useState<[number, number] | null>(null);
+  const [routeCompareId, setRouteCompareId] = useState<string | null>(null);
+  const [routeCompareName, setRouteCompareName] = useState('');
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
   const { signals, heatmapTiles, fetchData } = useMapData();
+  const { status: syncStatus } = useSync();
+
+  const { activeSession, startSession, addLog, completeSession } = useSession();
 
   const handleNewLog = useCallback((log: SignalLog) => {
-    console.log('New signal log:', log.signal.dbm, log.carrier);
-  }, []);
+    addLog(log);
+  }, [addLog]);
 
-  const { isActive, currentSignal, toggle } = useSignalLogger(handleNewLog);
+  const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog);
 
   const updateUserMarker = useCallback((lat: number, lng: number) => {
     webViewRef.current?.injectJavaScript(
@@ -133,6 +219,8 @@ export function MapScreen() {
   }, []);
 
   const centerOnUser = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     try {
       const loc = await getCurrentLocation();
       const [lng, lat] = loc.coordinates;
@@ -140,32 +228,66 @@ export function MapScreen() {
       webViewRef.current?.injectJavaScript(
         `map.setView([${lat},${lng}], 15); true;`,
       );
-    } catch {}
+    } catch (err) {
+      console.warn('centerOnUser failed:', err);
+    } finally {
+      busyRef.current = false;
+    }
   }, [updateUserMarker]);
 
-  // Watch location while logging — update blue dot
+  // Watch location while logging — update dot
   React.useEffect(() => {
     if (!isActive) return;
 
-    const watchId = watchLocation((loc) => {
-      const [lng, lat] = loc.coordinates;
-      updateUserMarker(lat, lng);
-    });
+    let watchId: number | null = null;
+    try {
+      watchId = watchLocation(
+        (loc) => {
+          const [lng, lat] = loc.coordinates;
+          updateUserMarker(lat, lng);
+        },
+        (err) => console.warn('watchLocation error:', err),
+      );
+    } catch (err) {
+      console.warn('Failed to start watchLocation:', err);
+    }
 
-    return () => clearWatch(watchId);
+    return () => {
+      if (watchId !== null) {
+        try { clearWatch(watchId); } catch {}
+      }
+    };
   }, [isActive, updateUserMarker]);
 
   // Center on user on first load
   React.useEffect(() => {
-    centerOnUser();
+    const timer = setTimeout(() => centerOnUser(), 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleToggle = useCallback(async () => {
-    await toggle();
-    if (!isActive) {
-      centerOnUser();
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      if (isActive) {
+        await toggle();
+        const completed = await completeSession();
+        if (completed) {
+          setCompletedSession(completed);
+        }
+      } else {
+        const carrier = currentSignal?.carrier || 'Unknown';
+        const networkType = currentSignal?.networkType || 'none';
+        await startSession(carrier, networkType);
+        await toggle();
+        setTimeout(() => centerOnUser(), 1500);
+      }
+    } catch (err) {
+      console.warn('handleToggle error:', err);
+    } finally {
+      setTimeout(() => { busyRef.current = false; }, 2000);
     }
-  }, [toggle, isActive, centerOnUser]);
+  }, [toggle, isActive, currentSignal, startSession, completeSession, centerOnUser]);
 
   const handleWebViewMessage = useCallback(
     (event: any) => {
@@ -176,12 +298,23 @@ export function MapScreen() {
             sw: data.sw,
             ne: data.ne,
           };
+          lastViewport.current = { bounds: viewport, zoom: data.zoom };
           fetchData(viewport, data.zoom, filters);
+        } else if (data.type === 'mapTap' && compareMode) {
+          setCompareCoords([data.lng, data.lat]);
+          setCompareVisible(true);
         }
       } catch {}
     },
-    [fetchData, filters],
+    [fetchData, filters, compareMode],
   );
+
+  // Refetch when filters change (without needing a map move)
+  React.useEffect(() => {
+    if (lastViewport.current) {
+      fetchData(lastViewport.current.bounds, lastViewport.current.zoom, filters);
+    }
+  }, [filters, fetchData]);
 
   // Send overlay data to WebView when signals/heatmap change
   const updateOverlays = useCallback(() => {
@@ -209,11 +342,42 @@ export function MapScreen() {
     updateOverlays();
   }, [updateOverlays]);
 
+  const reportBusyRef = useRef(false);
   const handleReportSubmit = useCallback(
-    (data: any) => {
-      console.log('Report submitted:', data);
+    async (data: { category: any; note: string; attachments: any[] }) => {
+      if (reportBusyRef.current) return;
+      reportBusyRef.current = true;
+      try {
+        const [location, deviceId] = await Promise.all([
+          getCurrentLocation().catch(() => ({
+            type: 'Point' as const,
+            coordinates: [0, 0] as [number, number],
+            accuracy: 0,
+          })),
+          getDeviceId(),
+        ]);
+
+        await addReport({
+          timestamp: new Date(),
+          location: { type: 'Point', coordinates: location.coordinates },
+          carrier: currentSignal?.carrier || 'Unknown',
+          networkType: currentSignal?.networkType || 'none',
+          category: data.category,
+          note: data.note,
+          attachments: data.attachments,
+          deviceId,
+          synced: false,
+        });
+
+        Alert.alert('Report Submitted', 'Your signal report has been saved and will sync when connected.');
+      } catch (err) {
+        console.warn('Report submit error:', err);
+        Alert.alert('Error', 'Failed to save report. Please try again.');
+      } finally {
+        setTimeout(() => { reportBusyRef.current = false; }, 3000);
+      }
     },
-    [],
+    [currentSignal],
   );
 
   return (
@@ -228,39 +392,127 @@ export function MapScreen() {
         originWhitelist={['*']}
       />
 
-      {/* Filter chips */}
+      {/* Filter dropdowns + search */}
       <FilterChips
         filters={filters}
         onToggleCarrier={toggleCarrier}
         onToggleNetworkType={toggleNetworkType}
+        onSearchSelect={(loc) => {
+          webViewRef.current?.injectJavaScript(
+            `map.setView([${loc.lat},${loc.lng}], 15); true;`,
+          );
+        }}
       />
 
-      {/* Center on user button */}
-      <TouchableOpacity
-        style={styles.locateBtn}
-        onPress={centerOnUser}
-      >
-        <Text style={styles.locateBtnText}>◎</Text>
-      </TouchableOpacity>
+      {/* Draggable button group */}
+      <DraggableButtonGroup
+        sheetHeight={sheetHeight}
+        actions={[
+          { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
+          { icon: '\uD83D\uDCCA', iconSize: 18, onPress: () => setCompareMode((prev: boolean) => !prev), active: compareMode },
+          { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
+        ]}
+      />
 
-      {/* FAB for report */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setReportVisible(true)}
+      {/* Bottom sheet */}
+      <SwipeableSheet
+        collapsedHeight={120}
+        expandedHeight={Math.round(Dimensions.get('window').height * 0.42)}
+        onHeightChange={setSheetHeight}
       >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
 
-      {/* Bottom sheet (collapsed) */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.handle} />
-        <SignalDisplay signal={currentSignal} isLogging={isActive} compact />
-        <TouchableOpacity style={styles.logToggle} onPress={handleToggle}>
-          <Text style={styles.logToggleText}>
-            {isActive ? 'Stop Logging' : 'Start Logging'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        {/* Tab bar */}
+        <View style={styles.tabBar}>
+          {(['live', 'sessions', 'routes'] as const).map((tab) => (
+            <View
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onTouchEnd={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab === 'live' ? 'Live' : tab === 'sessions' ? 'Sessions' : 'Routes'}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Live tab */}
+        {activeTab === 'live' && (
+          <View>
+            <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
+            <View
+              style={[styles.cta, isActive && styles.ctaActive]}
+              onTouchEnd={() => handleToggle()}
+            >
+              <Text style={[styles.ctaText, isActive && styles.ctaTextActive]}>
+                {isActive ? 'Stop Mapping' : 'Start Mapping'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Sessions tab */}
+        {activeTab === 'sessions' && (
+          <View style={styles.tabContent}>
+            <SessionsList onSelectSession={(s) => setSelectedSession(s)} />
+          </View>
+        )}
+
+        {/* Routes tab */}
+        {activeTab === 'routes' && (
+          <View style={styles.tabContent}>
+            <RoutesList onSelectRoute={(r) => setSelectedRoute(r)} />
+          </View>
+        )}
+      </SwipeableSheet>
+
+      {/* Session detail overlay */}
+      {selectedSession && (
+        <SessionDetail
+          session={selectedSession}
+          onBack={() => setSelectedSession(null)}
+        />
+      )}
+
+      {/* Route detail overlay */}
+      {selectedRoute && (
+        <RouteDetail
+          route={selectedRoute}
+          onBack={() => setSelectedRoute(null)}
+        />
+      )}
+
+      {/* Location comparison popup */}
+      <LocationComparison
+        visible={compareVisible}
+        coordinates={compareCoords}
+        onClose={() => {
+          setCompareVisible(false);
+          setCompareCoords(null);
+        }}
+      />
+
+      {/* Route comparison overlay */}
+      {routeCompareId && (
+        <RouteComparison
+          routeId={routeCompareId}
+          routeName={routeCompareName}
+          onBack={() => {
+            setRouteCompareId(null);
+            setRouteCompareName('');
+          }}
+        />
+      )}
+
+      {/* Save route modal after session complete */}
+      {completedSession && (
+        <SaveRouteModal
+          visible={!!completedSession}
+          session={completedSession}
+          onSaved={() => setCompletedSession(null)}
+          onSkip={() => setCompletedSession(null)}
+        />
+      )}
 
       {/* Report modal */}
       <ReportModal
@@ -277,81 +529,57 @@ export function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#111827',
   },
   map: {
     flex: 1,
   },
-  locateBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 216,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#533483',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  locateBtnText: {
-    color: '#fff',
-    fontSize: 24,
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 148,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#533483',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  fabText: {
-    color: '#fff',
-    fontSize: 28,
-    lineHeight: 30,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingBottom: 20,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#ccc',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8,
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
     marginBottom: 4,
   },
-  logToggle: {
-    backgroundColor: '#533483',
-    marginHorizontal: 16,
-    marginBottom: 8,
+  tab: {
+    flex: 1,
     paddingVertical: 10,
-    borderRadius: 8,
     alignItems: 'center',
   },
-  logToggleText: {
-    color: '#e0e0e0',
-    fontSize: 14,
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#22C55E',
+  },
+  tabText: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#22C55E',
     fontWeight: '600',
+  },
+  tabContent: {
+    maxHeight: 250,
+  },
+  cta: {
+    backgroundColor: '#22C55E',
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  ctaActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  ctaText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  ctaTextActive: {
+    color: '#EF4444',
   },
 });
