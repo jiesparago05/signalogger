@@ -493,6 +493,11 @@ export function MapScreen() {
         <RouteDetail
           route={selectedRoute}
           onBack={() => setSelectedRoute(null)}
+          onCompare={(routeId, routeName) => {
+            setSelectedRoute(null);
+            setRouteCompareId(routeId);
+            setRouteCompareName(routeName);
+          }}
         />
       )}
 
