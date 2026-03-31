@@ -25,6 +25,8 @@ import { MappingSession, CommuteRoute } from '../../../types/signal';
 import { LocationComparison } from '../../comparison/components/LocationComparison';
 import { RouteComparison } from '../../comparison/components/RouteComparison';
 import { SaveRouteModal } from '../../sessions/components/SaveRouteModal';
+import { useDeadZone } from '../../dead-zone/hooks/use-dead-zone';
+import { DeadZoneBanner } from '../../dead-zone/components/DeadZoneBanner';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -232,6 +234,19 @@ export function MapScreen() {
 
   const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog);
 
+  const { inDeadZone, processReading } = useDeadZone();
+
+  // Feed signal readings to dead zone detector
+  React.useEffect(() => {
+    if (currentSignal) {
+      processReading(
+        currentSignal.signal.dbm,
+        currentSignal.carrier,
+        currentSignal.networkType,
+      );
+    }
+  }, [currentSignal, processReading]);
+
   const updateUserMarker = useCallback((lat: number, lng: number) => {
     webViewRef.current?.injectJavaScript(
       `setUserLocation(${lat},${lng}); true;`,
@@ -417,6 +432,9 @@ export function MapScreen() {
         originWhitelist={['*']}
       />
 
+      {/* Dead zone banner */}
+      <DeadZoneBanner visible={inDeadZone} />
+
       {/* Filter dropdowns + search */}
       <FilterChips
         filters={filters}
@@ -467,7 +485,7 @@ export function MapScreen() {
         {/* Live tab */}
         {activeTab === 'live' && (
           <View>
-            <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact />
+            <SignalDisplay signal={currentSignal} isLogging={isActive} stability={stability} compact inDeadZone={inDeadZone} />
             <View
               style={[styles.cta, isActive && styles.ctaActive]}
               onTouchEnd={() => handleToggle()}
