@@ -1,7 +1,7 @@
 import { LoggingConfig, Carrier, NetworkType, ReportCategory } from '../../types/signal';
 
 export const API_BASE_URL = __DEV__
-  ? 'http://10.0.2.2:3000/api' // Android emulator → host machine
+  ? 'http://localhost:3000/api' // Real device via adb reverse
   : 'https://api.signalog.app/api'; // production (placeholder)
 
 export const CARRIERS: Carrier[] = ['Smart', 'Globe', 'TNT', 'GOMO', 'Sun', 'DITO'];
