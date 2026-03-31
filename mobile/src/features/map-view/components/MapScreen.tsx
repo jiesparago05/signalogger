@@ -466,12 +466,26 @@ export function MapScreen() {
         )}
       </SwipeableSheet>
 
-      {/* Session detail overlay */}
+      {/* Session detail overlay - shows in bottom area, trail drawn on main map */}
       {selectedSession && (
-        <SessionDetail
-          session={selectedSession}
-          onBack={() => setSelectedSession(null)}
-        />
+        <View style={styles.sessionOverlay}>
+          <SessionDetail
+            session={selectedSession}
+            onBack={() => {
+              setSelectedSession(null);
+            }}
+            onDrawTrail={(trail) => {
+              const trailJSON = JSON.stringify(trail);
+              webViewRef.current?.injectJavaScript(`drawSessionTrail(${trailJSON}); true;`);
+            }}
+            onClearTrail={() => {
+              webViewRef.current?.injectJavaScript('clearSessionTrail(); true;');
+            }}
+            onSaveAsRoute={() => {
+              setCompletedSession(selectedSession);
+            }}
+          />
+        </View>
       )}
 
       {/* Route detail overlay */}
@@ -581,5 +595,15 @@ const styles = StyleSheet.create({
   },
   ctaTextActive: {
     color: '#EF4444',
+  },
+  sessionOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
   },
 });
