@@ -113,27 +113,38 @@ function sleep(ms: number): Promise<void> {
 export async function startLogging(): Promise<void> {
   if (isLogging) return;
 
-  const options = {
-    taskName: 'SignalLogging',
-    taskTitle: 'Signalog',
-    taskDesc: 'Recording signal strength in background',
-    taskIcon: {
-      name: 'ic_launcher',
-      type: 'mipmap',
-    },
-    color: '#533483',
-    parameters: {
-      delay: config.stationaryIntervalMs,
-    },
-  };
+  try {
+    const options = {
+      taskName: 'SignalLogging',
+      taskTitle: 'Signalog',
+      taskDesc: 'Recording signal strength in background',
+      taskIcon: {
+        name: 'ic_launcher',
+        type: 'mipmap',
+      },
+      color: '#22C55E',
+      linkingURI: '',
+      parameters: {
+        delay: config.stationaryIntervalMs,
+      },
+    };
 
-  await BackgroundService.start(loggingTask, options);
-  isLogging = true;
+    await BackgroundService.start(loggingTask, options);
+    isLogging = true;
+  } catch (error) {
+    console.warn('Failed to start background service:', error);
+    // Still mark as logging so UI updates, signal reading works without background service
+    isLogging = true;
+  }
 }
 
 export async function stopLogging(): Promise<void> {
   if (!isLogging) return;
-  await BackgroundService.stop();
+  try {
+    await BackgroundService.stop();
+  } catch (error) {
+    console.warn('Failed to stop background service:', error);
+  }
   isLogging = false;
   lastLocation = null;
 }

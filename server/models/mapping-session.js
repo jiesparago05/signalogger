@@ -12,6 +12,8 @@ const mappingSessionSchema = new mongoose.Schema({
     type: { type: String, enum: ['Point'] },
     coordinates: [Number],
   },
+  startLocationName: String,
+  endLocationName: String,
   logCount: { type: Number, default: 0 },
   avgDbm: Number,
   minDbm: Number,

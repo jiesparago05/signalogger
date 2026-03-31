@@ -22,6 +22,9 @@ import { SessionDetail } from '../../sessions/components/SessionDetail';
 import { RoutesList } from '../../routes/components/RoutesList';
 import { RouteDetail } from '../../routes/components/RouteDetail';
 import { MappingSession, CommuteRoute } from '../../../types/signal';
+import { LocationComparison } from '../../comparison/components/LocationComparison';
+import { RouteComparison } from '../../comparison/components/RouteComparison';
+import { SaveRouteModal } from '../../sessions/components/SaveRouteModal';
 
 const LEAFLET_HTML = `
 <!DOCTYPE html>
@@ -99,6 +102,81 @@ const LEAFLET_HTML = `
       circles.push(c);
     }
 
+    var sessionPolylines = [];
+    var sessionMarkers = [];
+
+    function drawSessionTrail(trailData) {
+      clearSessionTrail();
+      if (!trailData || trailData.length < 2) return;
+
+      // Group consecutive points with same color into single polylines
+      var currentColor = trailData[0].color;
+      var currentPoints = [[trailData[0].lat, trailData[0].lng]];
+
+      for (var i = 1; i < trailData.length; i++) {
+        var p = trailData[i];
+        if (p.color !== currentColor) {
+          // Finish current segment (include this point for seamless join)
+          currentPoints.push([p.lat, p.lng]);
+          var line = L.polyline(currentPoints, {
+            color: currentColor, weight: 6, opacity: 0.9,
+            lineCap: 'round', lineJoin: 'round'
+          }).addTo(map);
+          sessionPolylines.push(line);
+          // Start new segment from this point
+          currentColor = p.color;
+          currentPoints = [[p.lat, p.lng]];
+        } else {
+          currentPoints.push([p.lat, p.lng]);
+        }
+      }
+      // Draw last segment
+      if (currentPoints.length >= 2) {
+        var lastLine = L.polyline(currentPoints, {
+          color: currentColor, weight: 6, opacity: 0.9,
+          lineCap: 'round', lineJoin: 'round'
+        }).addTo(map);
+        sessionPolylines.push(lastLine);
+      }
+
+      // Start marker (green)
+      var startM = L.circleMarker(
+        [trailData[0].lat, trailData[0].lng],
+        { radius: 7, fillColor: '#22C55E', fillOpacity: 1, stroke: true, color: '#fff', weight: 3 }
+      ).addTo(map);
+      sessionMarkers.push(startM);
+
+      // End marker (red)
+      var endM = L.circleMarker(
+        [trailData[trailData.length-1].lat, trailData[trailData.length-1].lng],
+        { radius: 7, fillColor: '#EF4444', fillOpacity: 1, stroke: true, color: '#fff', weight: 3 }
+      ).addTo(map);
+      sessionMarkers.push(endM);
+
+      // Fit map bounds to trail
+      var lats = trailData.map(function(p) { return p.lat; });
+      var lngs = trailData.map(function(p) { return p.lng; });
+      map.fitBounds([
+        [Math.min.apply(null, lats) - 0.002, Math.min.apply(null, lngs) - 0.002],
+        [Math.max.apply(null, lats) + 0.002, Math.max.apply(null, lngs) + 0.002]
+      ]);
+    }
+
+    function clearSessionTrail() {
+      sessionPolylines.forEach(function(l) { map.removeLayer(l); });
+      sessionMarkers.forEach(function(m) { map.removeLayer(m); });
+      sessionPolylines = [];
+      sessionMarkers = [];
+    }
+
+    map.on('click', function(e) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'mapTap',
+        lng: e.latlng.lng,
+        lat: e.latlng.lat,
+      }));
+    });
+
     map.on('moveend', function() {
       var bounds = map.getBounds();
       var zoom = map.getZoom();
@@ -133,6 +211,14 @@ export function MapScreen() {
   const [activeTab, setActiveTab] = useState<'live' | 'sessions' | 'routes'>('live');
   const [selectedSession, setSelectedSession] = useState<MappingSession | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<CommuteRoute | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [heatmapVisible, setHeatmapVisible] = useState(true);
+  const [sheetHeight, setSheetHeight] = useState(Math.round(Dimensions.get('window').height * 0.42));
+  const [completedSession, setCompletedSession] = useState<MappingSession | null>(null);
+  const [compareVisible, setCompareVisible] = useState(false);
+  const [compareCoords, setCompareCoords] = useState<[number, number] | null>(null);
+  const [routeCompareId, setRouteCompareId] = useState<string | null>(null);
+  const [routeCompareName, setRouteCompareName] = useState('');
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
   const { signals, heatmapTiles, fetchData } = useMapData();
@@ -207,11 +293,7 @@ export function MapScreen() {
         await toggle();
         const completed = await completeSession();
         if (completed) {
-          Alert.alert(
-            'Session Complete',
-            `${completed.logCount} logs \u00B7 ${completed.distanceMeters}m \u00B7 avg ${completed.avgDbm} dBm`,
-            [{ text: 'OK' }],
-          );
+          setCompletedSession(completed);
         }
       } else {
         const carrier = currentSignal?.carrier || 'Unknown';
@@ -238,10 +320,13 @@ export function MapScreen() {
           };
           lastViewport.current = { bounds: viewport, zoom: data.zoom };
           fetchData(viewport, data.zoom, filters);
+        } else if (data.type === 'mapTap' && compareMode) {
+          setCompareCoords([data.lng, data.lat]);
+          setCompareVisible(true);
         }
       } catch {}
     },
-    [fetchData, filters],
+    [fetchData, filters, compareMode],
   );
 
   // Refetch when filters change (without needing a map move)
@@ -257,20 +342,25 @@ export function MapScreen() {
 
     let js = 'clearOverlays();';
 
-    signals.forEach((sig) => {
-      const color = getSignalColor(sig.signal.dbm);
-      js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
-    });
+    // Heatmap toggle is the master switch — OFF = clean map
+    if (heatmapVisible) {
+      // Show signal dots (respects carrier/network filters)
+      signals.forEach((sig) => {
+        const color = getSignalColor(sig.signal.dbm);
+        js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
+      });
 
-    heatmapTiles.forEach((tile) => {
-      const color = getSignalColor(tile.avgDbm);
-      const lat = (tile.swLat + tile.neLat) / 2;
-      const lng = (tile.swLng + tile.neLng) / 2;
-      js += `addHeatCircle(${lat},${lng},300,'${color}');`;
-    });
+      // Show heat circles
+      heatmapTiles.forEach((tile) => {
+        const color = getSignalColor(tile.avgDbm);
+        const lat = (tile.swLat + tile.neLat) / 2;
+        const lng = (tile.swLng + tile.neLng) / 2;
+        js += `addHeatCircle(${lat},${lng},300,'${color}');`;
+      });
+    }
 
     webViewRef.current.injectJavaScript(js + 'true;');
-  }, [signals, heatmapTiles]);
+  }, [signals, heatmapTiles, heatmapVisible]);
 
   // Update overlays when data changes
   React.useEffect(() => {
@@ -327,25 +417,36 @@ export function MapScreen() {
         originWhitelist={['*']}
       />
 
-      {/* Filter dropdowns */}
+      {/* Filter dropdowns + search */}
       <FilterChips
         filters={filters}
         onToggleCarrier={toggleCarrier}
         onToggleNetworkType={toggleNetworkType}
+        onSearchSelect={(loc) => {
+          webViewRef.current?.injectJavaScript(
+            `map.setView([${loc.lat},${loc.lng}], 15); true;`,
+          );
+        }}
       />
 
-      {/* Draggable button group */}
-      <DraggableButtonGroup
-        actions={[
-          { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
-          { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
-        ]}
-      />
+      {/* Draggable button group — hide when session or route detail is open */}
+      {!selectedSession && !selectedRoute && (
+        <DraggableButtonGroup
+          sheetHeight={sheetHeight}
+          actions={[
+            { icon: '\u25CE', iconSize: 20, onPress: () => centerOnUser() },
+            { icon: '\uD83D\uDCCA', iconSize: 18, onPress: () => setCompareMode((prev: boolean) => !prev), active: compareMode },
+            { icon: '\uD83D\uDD25', iconSize: 18, onPress: () => setHeatmapVisible((prev: boolean) => !prev), active: heatmapVisible },
+            { icon: '\u26A0\uFE0F', iconSize: 18, onPress: () => setReportVisible(true) },
+          ]}
+        />
+      )}
 
       {/* Bottom sheet */}
       <SwipeableSheet
         collapsedHeight={120}
         expandedHeight={Math.round(Dimensions.get('window').height * 0.42)}
+        onHeightChange={setSheetHeight}
       >
 
         {/* Tab bar */}
@@ -393,12 +494,26 @@ export function MapScreen() {
         )}
       </SwipeableSheet>
 
-      {/* Session detail overlay */}
+      {/* Session detail overlay - shows in bottom area, trail drawn on main map */}
       {selectedSession && (
-        <SessionDetail
-          session={selectedSession}
-          onBack={() => setSelectedSession(null)}
-        />
+        <View style={styles.sessionOverlay}>
+          <SessionDetail
+            session={selectedSession}
+            onBack={() => {
+              setSelectedSession(null);
+            }}
+            onDrawTrail={(trail) => {
+              const trailJSON = JSON.stringify(trail);
+              webViewRef.current?.injectJavaScript(`drawSessionTrail(${trailJSON}); true;`);
+            }}
+            onClearTrail={() => {
+              webViewRef.current?.injectJavaScript('clearSessionTrail(); true;');
+            }}
+            onSaveAsRoute={() => {
+              setCompletedSession(selectedSession);
+            }}
+          />
+        </View>
       )}
 
       {/* Route detail overlay */}
@@ -406,6 +521,43 @@ export function MapScreen() {
         <RouteDetail
           route={selectedRoute}
           onBack={() => setSelectedRoute(null)}
+          onCompare={(routeId, routeName) => {
+            setSelectedRoute(null);
+            setRouteCompareId(routeId);
+            setRouteCompareName(routeName);
+          }}
+        />
+      )}
+
+      {/* Location comparison popup */}
+      <LocationComparison
+        visible={compareVisible}
+        coordinates={compareCoords}
+        onClose={() => {
+          setCompareVisible(false);
+          setCompareCoords(null);
+        }}
+      />
+
+      {/* Route comparison overlay */}
+      {routeCompareId && (
+        <RouteComparison
+          routeId={routeCompareId}
+          routeName={routeCompareName}
+          onBack={() => {
+            setRouteCompareId(null);
+            setRouteCompareName('');
+          }}
+        />
+      )}
+
+      {/* Save route modal after session complete */}
+      {completedSession && (
+        <SaveRouteModal
+          visible={!!completedSession}
+          session={completedSession}
+          onSaved={() => setCompletedSession(null)}
+          onSkip={() => setCompletedSession(null)}
         />
       )}
 
@@ -476,5 +628,15 @@ const styles = StyleSheet.create({
   },
   ctaTextActive: {
     color: '#EF4444',
+  },
+  sessionOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: Math.round(Dimensions.get('window').height * 0.55),
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
   },
 });

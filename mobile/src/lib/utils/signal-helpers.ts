@@ -22,7 +22,7 @@ export function signalLevelLabel(dbm: number): string {
     good: 'Good',
     moderate: 'Moderate',
     weak: 'Weak',
-    dead: 'No Signal',
+    dead: 'Very Weak',
   };
   return labels[level] || 'Unknown';
 }

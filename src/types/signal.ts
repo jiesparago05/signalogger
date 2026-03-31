@@ -94,6 +94,8 @@ export interface MappingSession {
   endTime?: Date | string;
   startLocation?: { type: 'Point'; coordinates: [number, number] };
   endLocation?: { type: 'Point'; coordinates: [number, number] };
+  startLocationName?: string;
+  endLocationName?: string;
   logCount: number;
   avgDbm: number;
   minDbm: number;

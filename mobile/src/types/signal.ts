@@ -86,3 +86,74 @@ export interface FilterState {
   carriers: Carrier[];
   networkTypes: NetworkType[];
 }
+
+export interface MappingSession {
+  _id?: string;
+  deviceId: string;
+  startTime: Date | string;
+  endTime?: Date | string;
+  startLocation?: { type: 'Point'; coordinates: [number, number] };
+  endLocation?: { type: 'Point'; coordinates: [number, number] };
+  startLocationName?: string;
+  endLocationName?: string;
+  logCount: number;
+  avgDbm: number;
+  minDbm: number;
+  maxDbm: number;
+  carrier: string;
+  networkType: NetworkType;
+  distanceMeters: number;
+  stability: 'Stable' | 'Fluctuating' | 'Unstable';
+  routeId?: string;
+  status: 'active' | 'completed';
+  synced: boolean;
+}
+
+export interface RouteSegment {
+  startLocation: { type: 'Point'; coordinates: [number, number] };
+  endLocation: { type: 'Point'; coordinates: [number, number] };
+  label: string;
+  distanceMeters: number;
+  avgDbm: number;
+  minDbm: number;
+  maxDbm: number;
+  sampleCount: number;
+  activityLevel: string;
+}
+
+export interface CommuteRoute {
+  _id?: string;
+  deviceId: string;
+  name: string;
+  sessions: string[];
+  segments: RouteSegment[];
+  overallGrade: string;
+  totalTrips: number;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+export interface SignalHistoryEntry {
+  carrier: string;
+  avgDbm: number;
+  sampleCount: number;
+}
+
+export interface WorkZone {
+  _id?: string;
+  gridCell: { sw: [number, number]; ne: [number, number] };
+  carriers: { carrier: string; avgDbm: number; sampleCount: number; activityLevel: string }[];
+  bestCarrier: string;
+  bestAvgDbm: number;
+}
+
+export interface WorkSpotReview {
+  _id?: string;
+  location: { type: 'Point'; coordinates: [number, number] };
+  deviceId: string;
+  carrier: string;
+  rating: 'strong' | 'ok' | 'weak' | 'dead';
+  comment: string;
+  timestamp: Date | string;
+  synced: boolean;
+}
