@@ -20,7 +20,7 @@ async function queryByViewport(bounds, filters = {}) {
   };
 
   if (filters.carrier && filters.carrier.length > 0) {
-    query.carrier = { $in: filters.carrier };
+    query.carrier = { $in: filters.carrier.map((c) => new RegExp(`^${c}$`, 'i')) };
   }
   if (filters.networkType && filters.networkType.length > 0) {
     query.networkType = { $in: filters.networkType };
