@@ -44,4 +44,23 @@ app.post('/api/admin/consolidate', async (req, res) => {
   }
 });
 
+app.post('/api/admin/normalize-carriers', async (req, res) => {
+  try {
+    const SignalLog = require('./models/signal-log');
+    const ConsolidatedSignal = require('./models/consolidated-signal');
+    const MappingSession = require('./models/mapping-session');
+    const map = { 'SMART': 'Smart', 'GLOBE': 'Globe', 'SUN': 'Sun', 'smart': 'Smart', 'globe': 'Globe' };
+    let fixed = 0;
+    for (const [from, to] of Object.entries(map)) {
+      const r1 = await SignalLog.updateMany({ carrier: from }, { $set: { carrier: to } });
+      const r2 = await ConsolidatedSignal.updateMany({ carrier: from }, { $set: { carrier: to } });
+      const r3 = await MappingSession.updateMany({ carrier: from }, { $set: { carrier: to } });
+      fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0);
+    }
+    res.json({ status: 'ok', fixed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = app;
