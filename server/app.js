@@ -57,9 +57,10 @@ app.post('/api/admin/normalize-carriers', async (req, res) => {
       const r1 = await SignalLog.updateMany({ carrier: from }, { $set: { carrier: to } });
       const r2 = await ConsolidatedSignal.updateMany({ carrier: from }, { $set: { carrier: to } });
       const r3 = await MappingSession.updateMany({ carrier: from }, { $set: { carrier: to } });
-      const r4 = await SignalHistory.updateMany({ carrier: from }, { $set: { carrier: to } });
-      const r5 = await HeatmapTile.updateMany({ carrier: from }, { $set: { carrier: to } });
-      fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0) + (r4.modifiedCount || 0) + (r5.modifiedCount || 0);
+      const r4 = await SignalHistory.updateMany({ carrier: from }, { $set: { carrier: to } }).catch(() => ({ modifiedCount: 0 }));
+      // For heatmap tiles, delete old carrier entries (will be re-aggregated)
+      const r5 = await HeatmapTile.deleteMany({ carrier: from }).catch(() => ({ deletedCount: 0 }));
+      fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0) + (r4.modifiedCount || 0) + (r5.deletedCount || 0);
     }
     res.json({ status: 'ok', fixed });
   } catch (err) {
