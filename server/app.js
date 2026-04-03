@@ -34,4 +34,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.post('/api/admin/consolidate', async (req, res) => {
+  try {
+    const { consolidate } = require('./workers/consolidation-worker');
+    await consolidate();
+    res.json({ status: 'ok', message: 'Consolidation complete' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = app;
