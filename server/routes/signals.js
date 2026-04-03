@@ -18,8 +18,13 @@ router.post('/batch', async (req, res) => {
 
 router.get('/', validateBounds, parseFilters, async (req, res) => {
   try {
-    const signals = await signalService.queryByViewport(req.bounds, req.filters);
-    res.json({ data: signals, count: signals.length });
+    const { fresh, consolidated } = await signalService.queryByViewport(req.bounds, req.filters);
+    res.json({
+      data: fresh,
+      consolidated: consolidated,
+      count: fresh.length,
+      consolidatedCount: consolidated.length,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to query signals' });
   }

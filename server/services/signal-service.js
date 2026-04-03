@@ -1,4 +1,5 @@
 const SignalLog = require('../models/signal-log');
+const ConsolidatedSignal = require('../models/consolidated-signal');
 
 async function createBatch(signals) {
   if (!Array.isArray(signals) || signals.length === 0) {
@@ -11,7 +12,7 @@ async function createBatch(signals) {
 }
 
 async function queryByViewport(bounds, filters = {}) {
-  const query = {
+  const geoQuery = {
     location: {
       $geoWithin: {
         $box: [bounds.sw, bounds.ne],
@@ -19,14 +20,32 @@ async function queryByViewport(bounds, filters = {}) {
     },
   };
 
+  const carrierFilter = {};
   if (filters.carrier && filters.carrier.length > 0) {
-    query.carrier = { $in: filters.carrier.map((c) => new RegExp(`^${c}$`, 'i')) };
+    carrierFilter.carrier = { $in: filters.carrier.map((c) => new RegExp(`^${c}$`, 'i')) };
   }
   if (filters.networkType && filters.networkType.length > 0) {
-    query.networkType = { $in: filters.networkType };
+    carrierFilter.networkType = { $in: filters.networkType };
   }
 
-  return SignalLog.find(query).sort({ timestamp: -1 }).limit(500).lean();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  // Fresh signals (< 24h, not consolidated)
+  const freshQuery = {
+    ...geoQuery,
+    ...carrierFilter,
+    timestamp: { $gte: cutoff },
+  };
+  const fresh = await SignalLog.find(freshQuery).sort({ timestamp: -1 }).limit(200).lean();
+
+  // Consolidated signals
+  const consolidatedQuery = {
+    ...geoQuery,
+    ...carrierFilter,
+  };
+  const consolidated = await ConsolidatedSignal.find(consolidatedQuery).limit(300).lean();
+
+  return { fresh, consolidated };
 }
 
 module.exports = { createBatch, queryByViewport };

@@ -13,6 +13,7 @@ mongoose
 
     // Start heatmap aggregation worker
     require('./workers/heatmap-aggregator').start();
+    require('./workers/consolidation-worker').start();
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err);

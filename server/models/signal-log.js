@@ -51,6 +51,11 @@ const signalLogSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  consolidated: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
 });
 
 signalLogSchema.index({ location: '2dsphere' });
