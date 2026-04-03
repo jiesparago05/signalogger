@@ -49,13 +49,17 @@ app.post('/api/admin/normalize-carriers', async (req, res) => {
     const SignalLog = require('./models/signal-log');
     const ConsolidatedSignal = require('./models/consolidated-signal');
     const MappingSession = require('./models/mapping-session');
+    const SignalHistory = require('./models/signal-history');
+    const HeatmapTile = require('./models/heatmap-tile');
     const map = { 'SMART': 'Smart', 'GLOBE': 'Globe', 'SUN': 'Sun', 'smart': 'Smart', 'globe': 'Globe' };
     let fixed = 0;
     for (const [from, to] of Object.entries(map)) {
       const r1 = await SignalLog.updateMany({ carrier: from }, { $set: { carrier: to } });
       const r2 = await ConsolidatedSignal.updateMany({ carrier: from }, { $set: { carrier: to } });
       const r3 = await MappingSession.updateMany({ carrier: from }, { $set: { carrier: to } });
-      fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0);
+      const r4 = await SignalHistory.updateMany({ carrier: from }, { $set: { carrier: to } });
+      const r5 = await HeatmapTile.updateMany({ carrier: from }, { $set: { carrier: to } });
+      fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0) + (r4.modifiedCount || 0) + (r5.modifiedCount || 0);
     }
     res.json({ status: 'ok', fixed });
   } catch (err) {
