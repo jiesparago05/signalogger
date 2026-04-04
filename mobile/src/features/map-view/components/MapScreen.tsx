@@ -1046,8 +1046,30 @@ const styles = StyleSheet.create({
   dotDetailRange: { backgroundColor: '#1F2937', borderRadius: 8, padding: 10, marginBottom: 12 },
   dotDetailRangeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   dotDetailRangeText: { fontSize: 10 },
-  dotDetailBar: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  dotDetailBar: { height: 6, borderRadius: 3, overflow: 'hidden', position: 'relative' },
   dotDetailBarGradient: { flex: 1, height: 6, borderRadius: 3, backgroundColor: '#EAB308' },
   dotDetailClose: { padding: 8, alignItems: 'center' },
   dotDetailCloseText: { color: '#9CA3AF', fontSize: 13 },
+
+  // Breakdown section
+  breakdownSection: { marginBottom: 12 },
+  breakdownLabel: { color: '#6B7280', fontSize: 10, fontWeight: '600', letterSpacing: 1.5, textTransform: 'uppercase' as const, marginBottom: 6 },
+  breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10 },
+  breakdownRowBorder: { borderBottomWidth: 1, borderBottomColor: '#293548' },
+  breakdownRowSelected: { backgroundColor: 'rgba(59,130,246,0.15)', borderLeftWidth: 3, borderLeftColor: '#3B82F6' },
+  breakdownTime: { color: '#6B7280', fontSize: 10, width: 80 },
+  breakdownBarWrap: { flex: 1, height: 4, backgroundColor: '#293548', borderRadius: 2, marginHorizontal: 6, overflow: 'hidden' },
+  breakdownBar: { height: 4, borderRadius: 2 },
+  breakdownDbm: { fontSize: 12, fontWeight: '700', width: 34, textAlign: 'right' as const },
+  breakdownBadge: { fontSize: 8, fontWeight: '600', paddingVertical: 1, paddingHorizontal: 5, borderRadius: 4, marginLeft: 6, overflow: 'hidden' },
+  breakdownErrorText: { color: '#6B7280', fontSize: 12, textAlign: 'center' as const, paddingVertical: 16 },
+  showAllBtn: { paddingVertical: 8, alignItems: 'center' as const },
+  showAllText: { color: '#6B7280', fontSize: 11 },
+
+  // Skeleton loading rows
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 10 },
+  skeletonBlock: { height: 10, backgroundColor: '#1F2937', borderRadius: 4, opacity: 0.6 },
+
+  // Range bar marker
+  rangeMarker: { position: 'absolute', top: -3, width: 2, height: 12, backgroundColor: '#FFFFFF', borderRadius: 1 },
 });
