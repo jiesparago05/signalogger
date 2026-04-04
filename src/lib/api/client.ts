@@ -1,4 +1,19 @@
 import { API_BASE_URL } from '../config';
+
+// Wake up Render server on app start (free tier sleeps after 15 min)
+let serverAwake = false;
+export async function wakeServer(): Promise<void> {
+  if (serverAwake) return;
+  try {
+    await fetch(`${API_BASE_URL}/carriers`, { method: 'GET' });
+    serverAwake = true;
+    // Reset after 10 minutes (server sleeps after 15)
+    setTimeout(() => { serverAwake = false; }, 10 * 60 * 1000);
+  } catch {}
+}
+// Fire immediately on import
+wakeServer();
+
 import {
   SignalLog,
   ManualReport,
@@ -28,20 +43,28 @@ interface CarriersResponse {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return response.json();
 }
 
 export const api = {

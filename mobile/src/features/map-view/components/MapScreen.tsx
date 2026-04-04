@@ -11,7 +11,7 @@ import { useFilters } from '../hooks/use-filters';
 import { useSignalLogger } from '../../signal-logging/hooks/use-signal-logger';
 import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
-import { getActivityLevel, ACTIVITY_COLORS, ACTIVITY_SHORT } from '../../../lib/utils/activity-levels';
+import { getActivityLevel, ACTIVITY_SHORT } from '../../../lib/utils/activity-levels';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
 import { useSync } from '../../offline-sync/hooks/use-sync';
