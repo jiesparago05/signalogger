@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Text, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, Dimensions, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SwipeableSheet } from './SwipeableSheet';
 import { WebView } from 'react-native-webview';
 import { FilterChips } from './FilterChips';
@@ -15,7 +16,7 @@ import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logg
 import { useSync } from '../../offline-sync/hooks/use-sync';
 import { addReport } from '../../offline-sync/services/log-store';
 import { getDeviceId } from '../../../lib/config/device';
-import { Alert, ScrollView } from 'react-native';
+import { ScrollView } from 'react-native';
 import { DraggableButtonGroup } from './DraggableButton';
 import { SessionsList } from '../../sessions/components/SessionsList';
 import { SessionDetail } from '../../sessions/components/SessionDetail';
@@ -39,6 +40,24 @@ const LEAFLET_HTML = `
     * { margin: 0; padding: 0; }
     #map { width: 100vw; height: 100vh; }
     .leaflet-control-attribution { display: none !important; }
+    .signal-tooltip .leaflet-popup-content-wrapper {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      color: #F9FAFB;
+      padding: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .signal-tooltip .leaflet-popup-tip {
+      background: #111827;
+      border-right: 1px solid #374151;
+      border-bottom: 1px solid #374151;
+    }
+    .signal-tooltip .leaflet-popup-content {
+      margin: 8px 12px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -99,14 +118,56 @@ const LEAFLET_HTML = `
       circles = [];
     }
 
-    function addMarker(lat, lng, color) {
+    function addMarker(lat, lng, color, id) {
       var icon = L.divIcon({
         className: 'signal-marker',
         html: '<div style="width:10px;height:10px;border-radius:50%;background:' + color + ';border:1.5px solid rgba(255,255,255,0.3);box-shadow:0 0 6px ' + color + '44;"></div>',
         iconSize: [10, 10],
       });
       var m = L.marker([lat, lng], { icon: icon }).addTo(map);
+      if (id) {
+        m._signalogId = id;
+        m._isConsolidated = false;
+        m.on('click', function() {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'dotTap', id: id, isConsolidated: false, lat: lat, lng: lng
+          }));
+        });
+      }
       markers.push(m);
+    }
+
+    function addConsolidatedMarker(lat, lng, color, count, id) {
+      var icon = L.divIcon({
+        className: 'consolidated-marker',
+        html: '<div style="position:relative;width:18px;height:18px;">' +
+          '<div style="width:18px;height:18px;border-radius:50%;background:' + color + ';border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 8px ' + color + '66;"></div>' +
+          '<div style="position:absolute;top:-6px;right:-8px;background:#111827;color:#fff;font-size:7px;padding:1px 3px;border-radius:3px;min-width:12px;text-align:center">' + count + '\u00d7</div>' +
+          '</div>',
+        iconSize: [18, 18],
+      });
+      var m = L.marker([lat, lng], { icon: icon }).addTo(map);
+      m._signalogId = id;
+      m._isConsolidated = true;
+      m.on('click', function() {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'dotTap', id: id, isConsolidated: true, lat: lat, lng: lng
+        }));
+      });
+      markers.push(m);
+    }
+
+    var tooltipLayer = null;
+    function showTooltip(lat, lng, html) {
+      hideTooltip();
+      tooltipLayer = L.popup({ closeButton: false, className: 'signal-tooltip', offset: [0, -12] })
+        .setLatLng([lat, lng])
+        .setContent(html)
+        .openOn(map);
+    }
+
+    function hideTooltip() {
+      if (tooltipLayer) { map.closePopup(tooltipLayer); tooltipLayer = null; }
     }
 
     function addHeatCircle(lat, lng, radius, color) {
@@ -126,22 +187,30 @@ const LEAFLET_HTML = `
       clearSessionTrail();
       if (!trailData || trailData.length < 2) return;
 
-      // Group consecutive points with same color into single polylines
-      var currentColor = trailData[0].color;
+      var GAP_MS = 2 * 60 * 1000; // 2 minutes = gap
       var currentPoints = [[trailData[0].lat, trailData[0].lng]];
 
       for (var i = 1; i < trailData.length; i++) {
         var p = trailData[i];
-        if (p.color !== currentColor) {
-          // Finish current segment (include this point for seamless join)
-          currentPoints.push([p.lat, p.lng]);
-          var line = L.polyline(currentPoints, {
-            color: currentColor, weight: 6, opacity: 0.9,
-            lineCap: 'round', lineJoin: 'round'
-          }).addTo(map);
-          sessionPolylines.push(line);
-          // Start new segment from this point
-          currentColor = p.color;
+        var prev = trailData[i - 1];
+        var timeDiff = (p.ts && prev.ts) ? (p.ts - prev.ts) : 0;
+
+        if (timeDiff > GAP_MS) {
+          // Draw solid segment up to here
+          if (currentPoints.length >= 2) {
+            var solidLine = L.polyline(currentPoints, {
+              color: '#3B82F6', weight: 6, opacity: 0.9,
+              lineCap: 'round', lineJoin: 'round'
+            }).addTo(map);
+            sessionPolylines.push(solidLine);
+          }
+          // Draw dashed gray line across the gap
+          var gapLine = L.polyline(
+            [[prev.lat, prev.lng], [p.lat, p.lng]],
+            { color: '#6B7280', weight: 3, opacity: 0.7, dashArray: '8, 6' }
+          ).addTo(map);
+          sessionPolylines.push(gapLine);
+          // Start new segment
           currentPoints = [[p.lat, p.lng]];
         } else {
           currentPoints.push([p.lat, p.lng]);
@@ -150,7 +219,7 @@ const LEAFLET_HTML = `
       // Draw last segment
       if (currentPoints.length >= 2) {
         var lastLine = L.polyline(currentPoints, {
-          color: currentColor, weight: 6, opacity: 0.9,
+          color: '#3B82F6', weight: 6, opacity: 0.9,
           lineCap: 'round', lineJoin: 'round'
         }).addTo(map);
         sessionPolylines.push(lastLine);
@@ -176,7 +245,7 @@ const LEAFLET_HTML = `
       map.fitBounds([
         [Math.min.apply(null, lats) - 0.002, Math.min.apply(null, lngs) - 0.002],
         [Math.max.apply(null, lats) + 0.002, Math.max.apply(null, lngs) + 0.002]
-      ]);
+      ], { paddingTopLeft: [20, 20], paddingBottomRight: [20, 300] });
     }
 
     function clearSessionTrail() {
@@ -184,6 +253,28 @@ const LEAFLET_HTML = `
       sessionMarkers.forEach(function(m) { map.removeLayer(m); });
       sessionPolylines = [];
       sessionMarkers = [];
+      if (window._highlightMarker) { map.removeLayer(window._highlightMarker); window._highlightMarker = null; }
+    }
+
+    function highlightReading(lat, lng, color) {
+      if (window._highlightMarker) { map.removeLayer(window._highlightMarker); }
+      window._highlightMarker = L.circleMarker([lat, lng], {
+        radius: 12,
+        fillColor: color,
+        color: '#FFFFFF',
+        weight: 3,
+        fillOpacity: 0.9,
+      }).addTo(map);
+      map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: true });
+    }
+
+    function getMapState() {
+      var c = map.getCenter();
+      return JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() });
+    }
+    function restoreMapState(lat, lng, zoom) {
+      if (window._highlightMarker) { map.removeLayer(window._highlightMarker); window._highlightMarker = null; }
+      map.setView([lat, lng], zoom, { animate: true });
     }
 
     map.on('click', function(e) {
@@ -232,13 +323,17 @@ export function MapScreen() {
   const [heatmapVisible, setHeatmapVisible] = useState(true);
   const [sheetHeight, setSheetHeight] = useState(Math.round(Dimensions.get('window').height * 0.42));
   const [completedSession, setCompletedSession] = useState<MappingSession | null>(null);
+  const [sessionsKey, setSessionsKey] = useState(0);
   const [compareVisible, setCompareVisible] = useState(false);
   const [compareCoords, setCompareCoords] = useState<[number, number] | null>(null);
   const [routeCompareId, setRouteCompareId] = useState<string | null>(null);
   const [routeCompareName, setRouteCompareName] = useState('');
+  const [dotDetail, setDotDetail] = useState<any>(null);
+  const [dotTooltip, setDotTooltip] = useState<any>(null);
+  const savedMapState = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
-  const { signals, heatmapTiles, fetchData } = useMapData();
+  const { signals, consolidated, heatmapTiles, fetchData } = useMapData();
   const { status: syncStatus } = useSync();
 
   const { activeSession, startSession, addLog, completeSession } = useSession();
@@ -247,7 +342,7 @@ export function MapScreen() {
     addLog(log);
   }, [addLog]);
 
-  const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog);
+  const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog, activeSession?._id);
 
   const { inDeadZone, processReading } = useDeadZone();
 
@@ -358,13 +453,37 @@ export function MapScreen() {
           };
           lastViewport.current = { bounds: viewport, zoom: data.zoom };
           fetchData(viewport, data.zoom, filters);
-        } else if (data.type === 'mapTap' && compareMode) {
-          setCompareCoords([data.lng, data.lat]);
-          setCompareVisible(true);
+        } else if (data.type === 'dotTap') {
+          if (dotTooltip && dotTooltip.id === data.id) {
+            // Second tap — show full detail card
+            setDotDetail(data);
+            setDotTooltip(null);
+            webViewRef.current?.injectJavaScript('hideTooltip(); true;');
+          } else {
+            // First tap — show tooltip
+            setDotTooltip(data);
+            setDotDetail(null);
+            const tooltipHtml = data.isConsolidated
+              ? buildConsolidatedTooltip(data, consolidated)
+              : buildFreshTooltip(data, signals);
+            webViewRef.current?.injectJavaScript(
+              `showTooltip(${data.lat},${data.lng},'${tooltipHtml.replace(/'/g, "\\'")}'); true;`
+            );
+          }
+        } else if (data.type === 'mapTap') {
+          // Dismiss tooltip/detail on any map tap
+          if (dotTooltip || dotDetail) {
+            setDotTooltip(null);
+            setDotDetail(null);
+            webViewRef.current?.injectJavaScript('hideTooltip(); true;');
+          } else if (compareMode) {
+            setCompareCoords([data.lng, data.lat]);
+            setCompareVisible(true);
+          }
         }
       } catch {}
     },
-    [fetchData, filters, compareMode],
+    [fetchData, filters, compareMode, dotTooltip, dotDetail, signals, consolidated],
   );
 
   // Refetch when filters change (without needing a map move)
@@ -380,12 +499,24 @@ export function MapScreen() {
 
     let js = 'clearOverlays();';
 
+    // Hide dots/heatmap when viewing a session detail (only trail shows)
+    if (selectedSession) {
+      webViewRef.current.injectJavaScript(js + 'true;');
+      return;
+    }
+
     // Heatmap toggle is the master switch — OFF = clean map
     // Don't show heatmap during dead zone
     if (heatmapVisible && !inDeadZone) {
       signals.forEach((sig) => {
         const color = getSignalColor(sig.signal.dbm);
-        js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}');`;
+        js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}','${sig._id}');`;
+      });
+
+      // Consolidated dots
+      consolidated.forEach((c) => {
+        const color = getSignalColor(c.avgDbm);
+        js += `addConsolidatedMarker(${c.location.coordinates[1]},${c.location.coordinates[0]},'${color}',${c.count},'${c._id}');`;
       });
 
       heatmapTiles.forEach((tile) => {
@@ -397,7 +528,7 @@ export function MapScreen() {
     }
 
     webViewRef.current.injectJavaScript(js + 'true;');
-  }, [signals, heatmapTiles, heatmapVisible, inDeadZone]);
+  }, [signals, consolidated, heatmapTiles, heatmapVisible, inDeadZone, selectedSession]);
 
   // Update overlays when data changes
   React.useEffect(() => {
@@ -442,6 +573,23 @@ export function MapScreen() {
     [currentSignal],
   );
 
+  function buildFreshTooltip(data: any, signals: any[]): string {
+    const sig = signals.find((s) => s._id === data.id);
+    if (!sig) return '';
+    const color = getSignalColor(sig.signal.dbm);
+    const time = new Date(sig.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<div style="font-size:11px"><span style="color:${color};font-size:15px;font-weight:bold">${sig.signal.dbm}</span> <span style="color:#9CA3AF">dBm</span><br/><span style="color:#9CA3AF">${sig.carrier} · ${sig.networkType}</span><br/><span style="color:#6B7280;font-size:9px">${time}</span></div>`;
+  }
+
+  function buildConsolidatedTooltip(data: any, consolidated: any[]): string {
+    const c = consolidated.find((r) => r._id === data.id);
+    if (!c) return '';
+    const color = getSignalColor(c.avgDbm);
+    const first = new Date(c.firstTimestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const last = new Date(c.lastTimestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `<div style="font-size:11px"><span style="color:${color};font-size:15px;font-weight:bold">${c.avgDbm}</span> <span style="color:#9CA3AF">avg dBm</span><br/><span style="color:#9CA3AF">${c.carrier} · ${c.networkType} · ${c.count} readings</span><br/><span style="color:#6B7280;font-size:9px">Range: ${c.maxDbm} to ${c.minDbm}</span><br/><span style="color:#6B7280;font-size:9px">${first} — ${last}</span></div>`;
+  }
+
   return (
     <View style={styles.container}>
       <WebView
@@ -470,8 +618,8 @@ export function MapScreen() {
         />
       )}
 
-      {/* Draggable button group — hide when session or route detail is open */}
-      {!selectedSession && !selectedRoute && (
+      {/* Draggable button group — hide when session, route detail, or dot detail is open */}
+      {!selectedSession && !selectedRoute && !dotDetail && !routeCompareId && (
         <DraggableButtonGroup
           sheetHeight={sheetHeight}
           actions={[
@@ -485,8 +633,8 @@ export function MapScreen() {
 
       {/* Bottom sheet */}
       <SwipeableSheet
-        collapsedHeight={120}
-        expandedHeight={Math.round(Dimensions.get('window').height * 0.42)}
+        collapsedHeight={Math.round(Dimensions.get('window').height * 0.15)}
+        expandedHeight={Math.round(Dimensions.get('window').height * 0.38)}
         onHeightChange={setSheetHeight}
       >
 
@@ -523,7 +671,7 @@ export function MapScreen() {
         {/* Sessions tab */}
         {activeTab === 'sessions' && (
           <View style={styles.tabContent}>
-            <SessionsList onSelectSession={(s) => setSelectedSession(s)} />
+            <SessionsList key={sessionsKey} onSelectSession={(s) => setSelectedSession(s)} isMapping={isActive} />
           </View>
         )}
 
@@ -553,21 +701,82 @@ export function MapScreen() {
             onSaveAsRoute={() => {
               setCompletedSession(selectedSession);
             }}
+            onHighlightReading={(lat, lng, color) => {
+              webViewRef.current?.injectJavaScript(`highlightReading(${lat},${lng},'${color}'); true;`);
+            }}
           />
+        </View>
+      )}
+
+      {/* Signal dot detail card */}
+      {dotDetail && (
+        <View style={styles.dotDetailOverlay}>
+          <View style={styles.dotDetailCard}>
+            <View style={styles.dotDetailHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dotDetailTitle}>{dotDetail.isConsolidated ? 'Signal Summary' : 'Signal Reading'}</Text>
+                <Text style={styles.dotDetailSub}>
+                  {(() => {
+                    const item = dotDetail.isConsolidated
+                      ? consolidated.find((c) => c._id === dotDetail.id)
+                      : signals.find((s) => s._id === dotDetail.id);
+                    if (!item) return '';
+                    return dotDetail.isConsolidated
+                      ? `${item.carrier} · ${item.networkType} · ${item.count} readings`
+                      : `${item.carrier} · ${item.networkType}`;
+                  })()}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                {(() => {
+                  const item = dotDetail.isConsolidated
+                    ? consolidated.find((c) => c._id === dotDetail.id)
+                    : signals.find((s) => s._id === dotDetail.id);
+                  const dbm = item ? (dotDetail.isConsolidated ? item.avgDbm : item.signal.dbm) : 0;
+                  return (
+                    <>
+                      <Text style={[styles.dotDetailDbm, { color: getSignalColor(dbm) }]}>{dbm}</Text>
+                      <Text style={styles.dotDetailDbmLabel}>{dotDetail.isConsolidated ? 'avg dBm' : 'dBm'}</Text>
+                    </>
+                  );
+                })()}
+              </View>
+            </View>
+            {dotDetail.isConsolidated && (() => {
+              const c = consolidated.find((r) => r._id === dotDetail.id);
+              if (!c) return null;
+              return (
+                <View style={styles.dotDetailRange}>
+                  <View style={styles.dotDetailRangeLabels}>
+                    <Text style={[styles.dotDetailRangeText, { color: '#22C55E' }]}>Best: {c.maxDbm}</Text>
+                    <Text style={[styles.dotDetailRangeText, { color: '#EF4444' }]}>Worst: {c.minDbm}</Text>
+                  </View>
+                  <View style={styles.dotDetailBar}>
+                    <View style={styles.dotDetailBarGradient} />
+                  </View>
+                </View>
+              );
+            })()}
+            <View style={styles.dotDetailClose} onTouchEnd={() => { setDotDetail(null); webViewRef.current?.injectJavaScript('hideTooltip(); true;'); }}>
+              <Text style={styles.dotDetailCloseText}>Close</Text>
+            </View>
+          </View>
         </View>
       )}
 
       {/* Route detail overlay */}
       {selectedRoute && (
-        <RouteDetail
-          route={selectedRoute}
-          onBack={() => setSelectedRoute(null)}
-          onCompare={(routeId, routeName) => {
-            setSelectedRoute(null);
-            setRouteCompareId(routeId);
-            setRouteCompareName(routeName);
-          }}
-        />
+        <View style={styles.sessionOverlay}>
+          <RouteDetail
+            route={selectedRoute}
+            onBack={() => setSelectedRoute(null)}
+            onCompare={(routeId, routeName) => {
+              setSelectedRoute(null);
+              setRouteCompareId(routeId);
+              setRouteCompareName(routeName);
+            }}
+          />
+        </View>
       )}
 
       {/* Location comparison popup */}
@@ -582,14 +791,16 @@ export function MapScreen() {
 
       {/* Route comparison overlay */}
       {routeCompareId && (
-        <RouteComparison
-          routeId={routeCompareId}
-          routeName={routeCompareName}
-          onBack={() => {
-            setRouteCompareId(null);
-            setRouteCompareName('');
-          }}
-        />
+        <View style={styles.sessionOverlay}>
+          <RouteComparison
+            routeId={routeCompareId}
+            routeName={routeCompareName}
+            onBack={() => {
+              setRouteCompareId(null);
+              setRouteCompareName('');
+            }}
+          />
+        </View>
       )}
 
       {/* Save route modal after session complete */}
@@ -597,7 +808,25 @@ export function MapScreen() {
         <SaveRouteModal
           visible={!!completedSession}
           session={completedSession}
-          onSaved={() => setCompletedSession(null)}
+          onSaved={(routeId) => {
+            // Update session with routeId locally
+            AsyncStorage.getItem('@signalog_sessions').then((raw) => {
+              if (!raw) return;
+              const sessions = JSON.parse(raw);
+              const idx = sessions.findIndex((s: any) => s._id === completedSession._id);
+              if (idx >= 0) {
+                sessions[idx] = { ...sessions[idx], routeId };
+                AsyncStorage.setItem('@signalog_sessions', JSON.stringify(sessions)).catch(() => {});
+              }
+            }).catch(() => {});
+            // Update selectedSession so SessionDetail hides "Save as Route"
+            if (selectedSession && selectedSession._id === completedSession._id) {
+              setSelectedSession({ ...selectedSession, routeId });
+            }
+            setCompletedSession(null);
+            setSessionsKey((k) => k + 1);
+            Alert.alert('Route Saved', 'Your route has been saved successfully.');
+          }}
           onSkip={() => setCompletedSession(null)}
         />
       )}
@@ -687,4 +916,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     overflow: 'hidden',
   },
+  dotDetailOverlay: { position: 'absolute', top: '30%', left: 0, right: 0, padding: 16 },
+  dotDetailCard: { backgroundColor: '#111827', borderRadius: 14, borderWidth: 1, borderColor: '#374151', padding: 16 },
+  dotDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  dotDetailTitle: { color: '#F9FAFB', fontSize: 15, fontWeight: 'bold' },
+  dotDetailSub: { color: '#9CA3AF', fontSize: 11, marginTop: 2 },
+  dotDetailDbm: { fontSize: 22, fontWeight: 'bold' },
+  dotDetailDbmLabel: { color: '#9CA3AF', fontSize: 9 },
+  dotDetailRange: { backgroundColor: '#1F2937', borderRadius: 8, padding: 10, marginBottom: 12 },
+  dotDetailRangeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  dotDetailRangeText: { fontSize: 10 },
+  dotDetailBar: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  dotDetailBarGradient: { flex: 1, height: 6, borderRadius: 3, backgroundColor: '#EAB308' },
+  dotDetailClose: { padding: 8, alignItems: 'center' },
+  dotDetailCloseText: { color: '#9CA3AF', fontSize: 13 },
 });
