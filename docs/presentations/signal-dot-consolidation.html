@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Dot Consolidation — Signalog</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F172A; color: #F1F5F9; line-height: 1.6; }
+
+  /* Navigation */
+  nav { position: fixed; top: 0; left: 0; right: 0; background: rgba(15,23,42,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid #1E293B; z-index: 100; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  nav .logo { font-weight: 700; font-size: 18px; color: #3B82F6; }
+  nav .sep { color: #334155; }
+  nav .title { color: #94A3B8; font-size: 14px; }
+
+  /* Sections */
+  section { min-height: 100vh; padding: 100px 40px 60px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 768px) { section { padding: 80px 20px 40px; } }
+
+  h1 { font-size: 42px; font-weight: 800; margin-bottom: 8px; background: linear-gradient(135deg, #3B82F6, #8B5CF6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  h2 { font-size: 28px; font-weight: 700; margin-bottom: 24px; color: #E2E8F0; }
+  h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #CBD5E1; }
+  .subtitle { font-size: 18px; color: #94A3B8; margin-bottom: 48px; max-width: 600px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #64748B; margin-bottom: 16px; }
+
+  /* Grid explanation */
+  .grid-demo { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; margin-top: 32px; }
+  .grid-visual { position: relative; width: 400px; height: 400px; background: #1E293B; border-radius: 16px; overflow: hidden; flex-shrink: 0; border: 1px solid #334155; }
+  .grid-visual .road-v { position: absolute; left: 48%; top: 0; bottom: 0; width: 24px; background: rgba(100,116,139,0.25); }
+  .grid-visual .road-h { position: absolute; top: 52%; left: 0; right: 0; height: 24px; background: rgba(100,116,139,0.25); }
+  .grid-line-v { position: absolute; top: 0; bottom: 0; width: 1px; border-left: 1px dashed rgba(59,130,246,0.25); }
+  .grid-line-h { position: absolute; left: 0; right: 0; height: 1px; border-top: 1px dashed rgba(59,130,246,0.25); }
+  .grid-cell-highlight { position: absolute; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.3); border-radius: 4px; }
+  .grid-cell-label { position: absolute; font-size: 9px; color: rgba(59,130,246,0.6); font-family: monospace; }
+  .dot { position: absolute; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.4); transition: all 0.3s; }
+  .dot.small { width: 10px; height: 10px; }
+  .dot.medium { width: 14px; height: 14px; border-width: 2px; border-color: rgba(255,255,255,0.6); }
+  .dot.large { width: 18px; height: 18px; border-width: 2px; border-color: rgba(255,255,255,0.6); }
+  .dot.green { background: #22C55E; }
+  .dot.yellow { background: #EAB308; }
+  .dot.red { background: #EF4444; }
+  .dot.glow-green { box-shadow: 0 0 10px rgba(34,197,94,0.5); }
+  .dot.glow-yellow { box-shadow: 0 0 10px rgba(234,179,8,0.5); }
+  .dot.glow-red { box-shadow: 0 0 10px rgba(239,68,68,0.5); }
+  .count-badge { position: absolute; background: #111827; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 6px; border: 1px solid #374151; white-space: nowrap; }
+  .grid-info { flex: 1; min-width: 280px; }
+  .grid-info .fact { background: #1E293B; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+  .grid-info .fact .num { font-size: 32px; font-weight: 800; color: #3B82F6; }
+  .grid-info .fact .unit { font-size: 14px; color: #94A3B8; margin-left: 4px; }
+  .grid-info .fact .desc { font-size: 13px; color: #64748B; margin-top: 4px; }
+  .code-block { background: #0D1117; border: 1px solid #21262D; border-radius: 8px; padding: 16px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 13px; color: #C9D1D9; overflow-x: auto; margin-top: 12px; line-height: 1.8; }
+  .code-comment { color: #6A737D; }
+  .code-keyword { color: #FF7B72; }
+  .code-number { color: #79C0FF; }
+  .code-fn { color: #D2A8FF; }
+  .code-prop { color: #7EE787; }
+
+  /* Before / After */
+  .comparison { display: grid; grid-template-columns: 1fr 80px 1fr; gap: 0; align-items: center; margin-top: 32px; }
+  @media (max-width: 768px) { .comparison { grid-template-columns: 1fr; gap: 24px; } .arrow-col { transform: rotate(90deg); } }
+  .map-frame { background: #1E293B; border-radius: 16px; overflow: hidden; border: 1px solid #334155; }
+  .map-frame .map-header { padding: 12px 16px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+  .map-frame .map-header .tag { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+  .map-frame .map-header .tag.before { background: rgba(239,68,68,0.15); color: #EF4444; }
+  .map-frame .map-header .tag.after { background: rgba(34,197,94,0.15); color: #22C55E; }
+  .map-frame .map-header .count { font-size: 12px; color: #64748B; }
+  .map-area { position: relative; height: 340px; background: linear-gradient(135deg, #1a2332, #1e293b); }
+  .arrow-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .arrow-col svg { width: 40px; height: 40px; color: #3B82F6; }
+  .arrow-col span { font-size: 11px; color: #64748B; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Interaction flow */
+  .flow-steps { display: flex; gap: 24px; margin-top: 32px; flex-wrap: wrap; }
+  .flow-step { flex: 1; min-width: 300px; background: #1E293B; border-radius: 16px; border: 1px solid #334155; overflow: hidden; }
+  .flow-step .step-num { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: #3B82F6; color: #fff; font-size: 13px; font-weight: 700; margin-right: 8px; }
+  .flow-step .step-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; }
+  .flow-step .step-body { padding: 0; }
+
+  /* Phone mockup */
+  .phone { width: 260px; margin: 20px auto; background: #0F172A; border-radius: 24px; border: 2px solid #334155; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+  .phone .status-bar { height: 24px; background: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 9px; color: #94A3B8; }
+  .phone .screen { position: relative; }
+
+  /* Tooltip mockup */
+  .tooltip-popup { background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); position: absolute; z-index: 10; }
+  .tooltip-popup .arrow-down { position: absolute; bottom: -7px; left: 30px; width: 14px; height: 14px; background: #111827; border-right: 1px solid #374151; border-bottom: 1px solid #374151; transform: rotate(45deg); }
+
+  /* Detail card */
+  .detail-card { background: #111827; border-top: 1px solid #374151; border-radius: 16px 16px 0 0; }
+  .detail-card .handle { width: 36px; height: 4px; background: #374151; border-radius: 2px; margin: 10px auto 0; }
+  .detail-card .content { padding: 16px 20px; }
+
+  /* Rules list */
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
+  .rule { background: #1E293B; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+  .rule .icon { font-size: 24px; margin-bottom: 8px; }
+  .rule .text { font-size: 13px; color: #94A3B8; }
+  .rule strong { color: #E2E8F0; }
+
+  /* Data flow */
+  .flow-diagram { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 24px; padding: 24px; background: #1E293B; border-radius: 16px; border: 1px solid #334155; }
+  .flow-box { background: #0F172A; border: 1px solid #334155; border-radius: 8px; padding: 10px 16px; font-size: 12px; color: #CBD5E1; text-align: center; white-space: nowrap; }
+  .flow-box.highlight { border-color: #3B82F6; background: rgba(59,130,246,0.1); color: #93C5FD; }
+  .flow-arrow { color: #475569; font-size: 18px; }
+
+  /* Animate */
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeInUp 0.6s ease-out forwards; }
+
+  /* Signal bar */
+  .signal-bar-container { height: 6px; border-radius: 3px; background: linear-gradient(to right, #22C55E, #EAB308, #EF4444); position: relative; margin: 8px 0; }
+  .signal-bar-marker { position: absolute; top: -4px; width: 2px; height: 14px; background: #fff; border-radius: 1px; }
+
+  /* Section divider */
+  .divider { height: 1px; background: linear-gradient(to right, transparent, #334155, transparent); margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">Signalog</span>
+  <span class="sep">/</span>
+  <span class="title">Signal Dot Consolidation</span>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section>
+  <p class="label">Feature Design</p>
+  <h1>Signal Dot Consolidation</h1>
+  <p class="subtitle">Auto-merge nearby signal readings on the map to reduce clutter from daily commuters traveling the same routes.</p>
+
+  <div class="rules">
+    <div class="rule">
+      <div class="icon">&#128205;</div>
+      <h3>~50m Grid</h3>
+      <div class="text">Readings within the same <strong>~50 meter grid cell</strong> get grouped together. Coordinates rounded to 0.0005 degrees.</div>
+    </div>
+    <div class="rule">
+      <div class="icon">&#9201;</div>
+      <h3>24h Threshold</h3>
+      <div class="text">Only readings <strong>older than 24 hours</strong> are consolidated. Fresh readings always show as individual dots.</div>
+    </div>
+    <div class="rule">
+      <div class="icon">&#128225;</div>
+      <h3>Same Carrier + Type</h3>
+      <div class="text">Only merges readings with the <strong>same carrier AND network type</strong> (e.g., Smart 4G stays separate from Globe 4G).</div>
+    </div>
+    <div class="rule">
+      <div class="icon">&#128246;</div>
+      <h3>Cellular Only</h3>
+      <div class="text">WiFi readings are <strong>excluded</strong> from consolidation. Only cellular signal data gets merged.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GRID SYSTEM ============ -->
+<section>
+  <p class="label">How It Works</p>
+  <h2>The ~50m Grid System</h2>
+
+  <div class="grid-demo">
+    <div class="grid-visual">
+      <!-- Grid lines -->
+      <div class="grid-line-v" style="left:25%"></div>
+      <div class="grid-line-v" style="left:50%"></div>
+      <div class="grid-line-v" style="left:75%"></div>
+      <div class="grid-line-h" style="top:25%"></div>
+      <div class="grid-line-h" style="top:50%"></div>
+      <div class="grid-line-h" style="top:75%"></div>
+
+      <!-- Roads -->
+      <div class="road-v"></div>
+      <div class="road-h"></div>
+
+      <!-- Highlighted cell (where consolidation happens) -->
+      <div class="grid-cell-highlight" style="left:25%;top:25%;width:25%;height:25%"></div>
+      <div class="grid-cell-label" style="left:27%;top:27%">Cell A</div>
+
+      <div class="grid-cell-highlight" style="left:50%;top:50%;width:25%;height:25%; background:rgba(234,179,8,0.08); border-color:rgba(234,179,8,0.3)"></div>
+      <div class="grid-cell-label" style="left:52%;top:52%; color:rgba(234,179,8,0.6)">Cell B</div>
+
+      <!-- Dots in Cell A (will consolidate) — scattered within the cell -->
+      <div class="dot small green" style="left:30%;top:32%"></div>
+      <div class="dot small green" style="left:35%;top:35%"></div>
+      <div class="dot small yellow" style="left:33%;top:40%"></div>
+      <div class="dot small green" style="left:40%;top:30%"></div>
+      <div class="dot small green" style="left:38%;top:38%"></div>
+      <div class="dot small yellow" style="left:42%;top:42%"></div>
+      <div class="dot small green" style="left:37%;top:34%"></div>
+
+      <!-- Dots in Cell B -->
+      <div class="dot small red" style="left:55%;top:58%"></div>
+      <div class="dot small red" style="left:60%;top:62%"></div>
+      <div class="dot small yellow" style="left:58%;top:55%"></div>
+      <div class="dot small red" style="left:63%;top:60%"></div>
+
+      <!-- Isolated dots (won't consolidate — fresh or alone) -->
+      <div class="dot small green" style="left:15%;top:65%"></div>
+      <div class="dot small yellow" style="left:80%;top:20%"></div>
+
+      <!-- Dimension label -->
+      <div style="position:absolute;bottom:26%;left:25%;width:25%;display:flex;align-items:center;">
+        <div style="flex:1;height:1px;background:rgba(59,130,246,0.5)"></div>
+      </div>
+      <div style="position:absolute;bottom:22%;left:30%;color:rgba(59,130,246,0.8);font-size:11px;font-weight:600;">~50m</div>
+
+      <div style="position:absolute;top:25%;right:22%;height:25%;display:flex;flex-direction:column;align-items:center;">
+        <div style="flex:1;width:1px;background:rgba(59,130,246,0.5)"></div>
+      </div>
+      <div style="position:absolute;top:35%;right:12%;color:rgba(59,130,246,0.8);font-size:11px;font-weight:600;">~50m</div>
+    </div>
+
+    <div class="grid-info">
+      <div class="fact">
+        <span class="num">0.0005</span><span class="unit">degrees</span>
+        <div class="desc">Grid cell size (~50 meters at Philippine latitudes)</div>
+      </div>
+      <div class="fact">
+        <span class="num">50</span><span class="unit">meters</span>
+        <div class="desc">Approximate real-world distance per grid cell</div>
+      </div>
+      <div class="fact">
+        <span class="num">24</span><span class="unit">hours</span>
+        <div class="desc">Minimum age before readings can be consolidated</div>
+      </div>
+
+      <h3 style="margin-top:24px;">Grid Snapping Formula</h3>
+      <div class="code-block">
+<span class="code-comment">// Round coordinates to nearest grid cell</span>
+<span class="code-keyword">const</span> <span class="code-prop">CELL_SIZE</span> = <span class="code-number">0.0005</span>;  <span class="code-comment">// ~50m</span>
+
+cellLat = <span class="code-fn">Math.round</span>(lat / <span class="code-prop">CELL_SIZE</span>) * <span class="code-prop">CELL_SIZE</span>;
+cellLng = <span class="code-fn">Math.round</span>(lng / <span class="code-prop">CELL_SIZE</span>) * <span class="code-prop">CELL_SIZE</span>;
+
+<span class="code-comment">// Example: 14.55023, 121.02187</span>
+<span class="code-comment">//       -> 14.5500,  121.0220</span>
+<span class="code-comment">// All readings in that cell = same group</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BEFORE / AFTER ============ -->
+<section>
+  <p class="label">Visual Impact</p>
+  <h2>Before vs After Consolidation</h2>
+
+  <div class="comparison">
+    <!-- BEFORE -->
+    <div class="map-frame">
+      <div class="map-header">
+        <span class="tag before">BEFORE</span>
+        <span class="count">18 individual dots</span>
+      </div>
+      <div class="map-area">
+        <!-- Roads -->
+        <div style="position:absolute;left:45%;top:0;bottom:0;width:20px;background:rgba(100,116,139,0.2)"></div>
+        <div style="position:absolute;top:50%;left:0;right:0;height:20px;background:rgba(100,116,139,0.2)"></div>
+
+        <!-- Cluster 1: intersection — messy overlapping dots -->
+        <div class="dot small green" style="left:43%;top:46%"></div>
+        <div class="dot small green" style="left:46%;top:48%"></div>
+        <div class="dot small yellow" style="left:44%;top:50%"></div>
+        <div class="dot small green" style="left:48%;top:47%"></div>
+        <div class="dot small red" style="left:47%;top:52%"></div>
+        <div class="dot small yellow" style="left:42%;top:53%"></div>
+        <div class="dot small green" style="left:50%;top:44%"></div>
+        <div class="dot small yellow" style="left:45%;top:42%"></div>
+        <div class="dot small green" style="left:41%;top:49%"></div>
+        <div class="dot small red" style="left:51%;top:50%"></div>
+
+        <!-- Cluster 2: north on road -->
+        <div class="dot small yellow" style="left:46%;top:18%"></div>
+        <div class="dot small yellow" style="left:48%;top:20%"></div>
+        <div class="dot small green" style="left:45%;top:23%"></div>
+
+        <!-- Cluster 3: south -->
+        <div class="dot small red" style="left:47%;top:72%"></div>
+        <div class="dot small red" style="left:45%;top:75%"></div>
+        <div class="dot small yellow" style="left:49%;top:70%"></div>
+
+        <!-- Scattered -->
+        <div class="dot small green" style="left:25%;top:51%"></div>
+        <div class="dot small green" style="left:70%;top:49%"></div>
+
+        <!-- Annotation -->
+        <div style="position:absolute;bottom:8px;left:12px;right:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:#FCA5A5;">
+          Cluttered! Same commuter, 3 days of travel. Dots overlap and become unreadable.
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arrow-col">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <span>Merge</span>
+    </div>
+
+    <!-- AFTER -->
+    <div class="map-frame">
+      <div class="map-header">
+        <span class="tag after">AFTER</span>
+        <span class="count">3 consolidated + 2 fresh</span>
+      </div>
+      <div class="map-area">
+        <!-- Roads -->
+        <div style="position:absolute;left:45%;top:0;bottom:0;width:20px;background:rgba(100,116,139,0.2)"></div>
+        <div style="position:absolute;top:50%;left:0;right:0;height:20px;background:rgba(100,116,139,0.2)"></div>
+
+        <!-- Consolidated dot 1: intersection (yellow avg, 10 readings) -->
+        <div class="dot large yellow glow-yellow" style="left:45%;top:47%"></div>
+        <div class="count-badge" style="left:54%;top:44%">10x</div>
+
+        <!-- Consolidated dot 2: north (yellow avg, 3 readings) -->
+        <div class="dot medium yellow glow-yellow" style="left:46%;top:19%"></div>
+        <div class="count-badge" style="left:53%;top:17%">3x</div>
+
+        <!-- Consolidated dot 3: south (red avg, 3 readings) -->
+        <div class="dot medium red glow-red" style="left:46%;top:72%"></div>
+        <div class="count-badge" style="left:53%;top:70%">3x</div>
+
+        <!-- Fresh dots (< 24h, individual) -->
+        <div class="dot small green pulse" style="left:25%;top:51%"></div>
+        <div class="dot small green pulse" style="left:70%;top:49%"></div>
+
+        <!-- Legend -->
+        <div style="position:absolute;bottom:8px;left:12px;right:12px;display:flex;gap:16px;font-size:10px;color:#94A3B8;">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:#EAB308;border:1.5px solid rgba(255,255,255,0.5);box-shadow:0 0 6px rgba(234,179,8,0.4)"></div>
+            Consolidated (>24h)
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#22C55E;border:1px solid rgba(255,255,255,0.4)"></div>
+            Fresh (&lt;24h)
+          </div>
+        </div>
+
+        <!-- Annotation -->
+        <div style="position:absolute;top:8px;left:12px;right:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:#86EFAC;">
+          Clean! 18 dots reduced to 5. Same data, better readability.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DOT SIZES ============ -->
+<section>
+  <p class="label">Visual Design</p>
+  <h2>Dot Size Comparison</h2>
+
+  <div style="display:flex;gap:60px;align-items:flex-end;margin-top:40px;flex-wrap:wrap;">
+    <!-- Individual -->
+    <div style="text-align:center;">
+      <div style="display:flex;align-items:center;justify-content:center;height:80px;">
+        <div style="width:10px;height:10px;border-radius:50%;background:#22C55E;border:1.5px solid rgba(255,255,255,0.4)"></div>
+      </div>
+      <div style="font-size:28px;font-weight:700;color:#E2E8F0;">10px</div>
+      <div style="font-size:12px;color:#64748B;margin-top:4px;">Individual (fresh)</div>
+      <div style="font-size:11px;color:#475569;">No badge, no glow</div>
+    </div>
+    <!-- Consolidated small -->
+    <div style="text-align:center;">
+      <div style="display:flex;align-items:center;justify-content:center;height:80px;gap:4px;">
+        <div style="width:14px;height:14px;border-radius:50%;background:#EAB308;border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 8px rgba(234,179,8,0.4)"></div>
+        <div style="background:#111827;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;border:1px solid #374151;">3x</div>
+      </div>
+      <div style="font-size:28px;font-weight:700;color:#E2E8F0;">14px</div>
+      <div style="font-size:12px;color:#64748B;margin-top:4px;">Consolidated (2-5)</div>
+      <div style="font-size:11px;color:#475569;">Badge + subtle glow</div>
+    </div>
+    <!-- Consolidated large -->
+    <div style="text-align:center;">
+      <div style="display:flex;align-items:center;justify-content:center;height:80px;gap:4px;">
+        <div style="width:18px;height:18px;border-radius:50%;background:#EF4444;border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 12px rgba(239,68,68,0.5)"></div>
+        <div style="background:#111827;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;border:1px solid #374151;">25x</div>
+      </div>
+      <div style="font-size:28px;font-weight:700;color:#E2E8F0;">18px</div>
+      <div style="font-size:12px;color:#64748B;margin-top:4px;">Consolidated (6+)</div>
+      <div style="font-size:11px;color:#475569;">Badge + stronger glow</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Color meanings -->
+  <h3>Signal Color Scale</h3>
+  <div style="margin-top:16px;display:flex;gap:24px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:16px;height:16px;border-radius:50%;background:#22C55E"></div>
+      <div><span style="color:#22C55E;font-weight:600;">Strong</span><span style="color:#64748B;font-size:12px;margin-left:6px;">> -85 dBm</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:16px;height:16px;border-radius:50%;background:#EAB308"></div>
+      <div><span style="color:#EAB308;font-weight:600;">Fair</span><span style="color:#64748B;font-size:12px;margin-left:6px;">-85 to -100 dBm</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:16px;height:16px;border-radius:50%;background:#EF4444"></div>
+      <div><span style="color:#EF4444;font-weight:600;">Weak</span><span style="color:#64748B;font-size:12px;margin-left:6px;">-100 to -115 dBm</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:16px;height:16px;border-radius:50%;background:#6B7280"></div>
+      <div><span style="color:#6B7280;font-weight:600;">Dead Zone</span><span style="color:#64748B;font-size:12px;margin-left:6px;">< -115 dBm</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TAP INTERACTIONS ============ -->
+<section>
+  <p class="label">User Interaction</p>
+  <h2>Tap Flow</h2>
+
+  <div class="flow-steps">
+    <!-- Step 1: First Tap - Tooltip -->
+    <div class="flow-step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div style="font-weight:600;color:#E2E8F0;">First Tap</div>
+          <div style="font-size:12px;color:#64748B;">Quick tooltip above the dot</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="phone">
+          <div class="status-bar">
+            <span>9:41</span>
+            <span>LTE</span>
+          </div>
+          <div class="screen" style="height:300px;background:linear-gradient(135deg,#1a2332,#1e293b);">
+            <!-- Roads -->
+            <div style="position:absolute;left:45%;top:0;bottom:0;width:16px;background:rgba(100,116,139,0.15)"></div>
+
+            <!-- The tapped dot (highlighted with blue ring) -->
+            <div style="position:absolute;left:44%;top:60%;width:18px;height:18px;border-radius:50%;background:#EAB308;border:3px solid #3B82F6;box-shadow:0 0 16px rgba(59,130,246,0.5)"></div>
+
+            <!-- Tooltip -->
+            <div class="tooltip-popup" style="left:18%;top:22%;width:180px;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+                <span style="color:#EAB308;font-size:20px;font-weight:800;">-82</span>
+                <span style="color:#64748B;font-size:10px;">avg dBm</span>
+              </div>
+              <div style="color:#94A3B8;font-size:11px;margin-bottom:3px;">GOMO &middot; 4G &middot; 10 readings</div>
+              <div style="color:#64748B;font-size:10px;margin-bottom:2px;">Range: -65 to -100</div>
+              <div style="color:#64748B;font-size:10px;">Apr 1 &mdash; Apr 3</div>
+              <div class="arrow-down"></div>
+            </div>
+
+            <!-- Other dots -->
+            <div class="dot small green" style="left:70%;top:45%"></div>
+            <div class="dot medium red glow-red" style="left:44%;top:82%"></div>
+            <div class="count-badge" style="left:53%;top:80%;font-size:8px;">5x</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Second Tap - Detail Card -->
+    <div class="flow-step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div style="font-weight:600;color:#E2E8F0;">Second Tap</div>
+          <div style="font-size:12px;color:#64748B;">Full detail card slides up</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="phone">
+          <div class="status-bar">
+            <span>9:41</span>
+            <span>LTE</span>
+          </div>
+          <div class="screen">
+            <!-- Mini map area -->
+            <div style="height:80px;background:linear-gradient(135deg,#1a2332,#1e293b);display:flex;align-items:center;justify-content:center;position:relative;">
+              <div style="width:18px;height:18px;border-radius:50%;background:#EAB308;border:3px solid #3B82F6;box-shadow:0 0 16px rgba(59,130,246,0.5)"></div>
+              <span style="position:absolute;bottom:4px;right:8px;font-size:8px;color:#475569;">zoomed in</span>
+            </div>
+
+            <!-- Detail card -->
+            <div class="detail-card">
+              <div class="handle"></div>
+              <div class="content">
+                <!-- Header -->
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+                  <div>
+                    <div style="font-size:15px;font-weight:700;color:#F1F5F9;">Katuparan Street</div>
+                    <div style="font-size:11px;color:#94A3B8;margin-top:2px;">GOMO &middot; 4G &middot; 10 readings</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-size:24px;font-weight:800;color:#EAB308;">-82</div>
+                    <div style="font-size:9px;color:#64748B;">avg dBm</div>
+                  </div>
+                </div>
+
+                <!-- Signal range -->
+                <div style="background:#1E293B;border-radius:10px;padding:12px;margin-bottom:12px;">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span style="color:#22C55E;font-size:10px;font-weight:600;">Best: -65</span>
+                    <span style="color:#EF4444;font-size:10px;font-weight:600;">Worst: -100</span>
+                  </div>
+                  <div class="signal-bar-container">
+                    <div class="signal-bar-marker" style="left:51%;"></div>
+                  </div>
+                  <div style="text-align:center;font-size:9px;color:#64748B;margin-top:4px;">avg: -82</div>
+                </div>
+
+                <!-- Reading history -->
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#475569;margin-bottom:8px;font-weight:600;">Recent Readings</div>
+                <div style="background:#1E293B;border-radius:10px;overflow:hidden;">
+                  <div style="display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #293548;">
+                    <span style="color:#64748B;font-size:10px;width:50px;">Apr 3</span>
+                    <div style="flex:1;height:3px;background:#293548;border-radius:2px;margin:0 8px;overflow:hidden;"><div style="width:70%;height:100%;background:#EAB308;border-radius:2px;"></div></div>
+                    <span style="color:#EAB308;font-size:11px;font-weight:700;width:36px;text-align:right;">-78</span>
+                  </div>
+                  <div style="display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #293548;">
+                    <span style="color:#64748B;font-size:10px;width:50px;">Apr 2</span>
+                    <div style="flex:1;height:3px;background:#293548;border-radius:2px;margin:0 8px;overflow:hidden;"><div style="width:45%;height:100%;background:#EF4444;border-radius:2px;"></div></div>
+                    <span style="color:#EF4444;font-size:11px;font-weight:700;width:36px;text-align:right;">-95</span>
+                  </div>
+                  <div style="display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #293548;">
+                    <span style="color:#64748B;font-size:10px;width:50px;">Apr 2</span>
+                    <div style="flex:1;height:3px;background:#293548;border-radius:2px;margin:0 8px;overflow:hidden;"><div style="width:85%;height:100%;background:#22C55E;border-radius:2px;"></div></div>
+                    <span style="color:#22C55E;font-size:11px;font-weight:700;width:36px;text-align:right;">-65</span>
+                  </div>
+                  <div style="display:flex;align-items:center;padding:8px 12px;">
+                    <span style="color:#64748B;font-size:10px;width:50px;">Apr 1</span>
+                    <div style="flex:1;height:3px;background:#293548;border-radius:2px;margin:0 8px;overflow:hidden;"><div style="width:60%;height:100%;background:#EAB308;border-radius:2px;"></div></div>
+                    <span style="color:#EAB308;font-size:11px;font-weight:700;width:36px;text-align:right;">-85</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DATA FLOW ============ -->
+<section>
+  <p class="label">Architecture</p>
+  <h2>Data Flow</h2>
+
+  <h3>Server-Side Consolidation</h3>
+  <div class="flow-diagram">
+    <div class="flow-box">Cron Job<br><span style="font-size:10px;color:#64748B;">every hour</span></div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box">Query readings<br><span style="font-size:10px;color:#64748B;">older than 24h</span></div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box highlight">Group by<br><span style="font-size:10px;color:#93C5FD;">carrier + type + grid cell</span></div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box">Calculate<br><span style="font-size:10px;color:#64748B;">avg, min, max, count</span></div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box">Save consolidated<br><span style="font-size:10px;color:#64748B;">mark originals</span></div>
+  </div>
+
+  <h3 style="margin-top:32px;">Client-Side Display</h3>
+  <div class="flow-diagram">
+    <div class="flow-box">fetchData()</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box highlight">Fresh readings<br><span style="font-size:10px;color:#93C5FD;">&lt; 24h individual dots</span></div>
+    <span class="flow-arrow">+</span>
+    <div class="flow-box highlight">Consolidated<br><span style="font-size:10px;color:#93C5FD;">merged dots with badge</span></div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box">Render on map</div>
+  </div>
+
+  <h3 style="margin-top:32px;">Consolidated Record</h3>
+  <div class="code-block" style="max-width:500px;">
+{
+  <span class="code-prop">type</span>: <span style="color:#A5D6FF;">'consolidated'</span>,
+  <span class="code-prop">carrier</span>: <span style="color:#A5D6FF;">'GOMO'</span>,
+  <span class="code-prop">networkType</span>: <span style="color:#A5D6FF;">'4G'</span>,
+  <span class="code-prop">location</span>: { <span class="code-prop">type</span>: <span style="color:#A5D6FF;">'Point'</span>, <span class="code-prop">coordinates</span>: [<span class="code-number">121.022</span>, <span class="code-number">14.550</span>] },
+  <span class="code-prop">avgDbm</span>: <span class="code-number">-82</span>,
+  <span class="code-prop">minDbm</span>: <span class="code-number">-100</span>,
+  <span class="code-prop">maxDbm</span>: <span class="code-number">-65</span>,
+  <span class="code-prop">count</span>: <span class="code-number">10</span>,
+  <span class="code-prop">firstTimestamp</span>: <span style="color:#A5D6FF;">'2026-04-01T...'</span>,
+  <span class="code-prop">lastTimestamp</span>: <span style="color:#A5D6FF;">'2026-04-03T...'</span>,
+  <span class="code-prop">readingIds</span>: [<span style="color:#A5D6FF;">'id1'</span>, <span style="color:#A5D6FF;">'id2'</span>, ...],
+}
+  </div>
+</section>
+
+<!-- ============ SUMMARY ============ -->
+<section style="min-height:auto;padding-bottom:100px;">
+  <p class="label">Summary</p>
+  <h2>Key Decisions</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:24px;">
+    <div style="background:#1E293B;border-radius:12px;padding:20px;border-left:3px solid #3B82F6;">
+      <div style="font-weight:600;color:#E2E8F0;margin-bottom:4px;">Grid-based, not radius-based</div>
+      <div style="font-size:13px;color:#94A3B8;">Rounding to 0.0005 degrees is fast, indexable, and doesn't require distance calculations.</div>
+    </div>
+    <div style="background:#1E293B;border-radius:12px;padding:20px;border-left:3px solid #22C55E;">
+      <div style="font-weight:600;color:#E2E8F0;margin-bottom:4px;">Originals kept, not deleted</div>
+      <div style="font-size:13px;color:#94A3B8;">Original readings are marked as consolidated but preserved for drill-down history.</div>
+    </div>
+    <div style="background:#1E293B;border-radius:12px;padding:20px;border-left:3px solid #EAB308;">
+      <div style="font-weight:600;color:#E2E8F0;margin-bottom:4px;">Local-first consolidation too</div>
+      <div style="font-size:13px;color:#94A3B8;">Same algorithm runs client-side on AsyncStorage data, so the map stays clean even offline.</div>
+    </div>
+    <div style="background:#1E293B;border-radius:12px;padding:20px;border-left:3px solid #8B5CF6;">
+      <div style="font-weight:600;color:#E2E8F0;margin-bottom:4px;">Per-carrier separation</div>
+      <div style="font-size:13px;color:#94A3B8;">Smart 4G and Globe 4G at the same spot remain as separate consolidated dots for accurate comparison.</div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
