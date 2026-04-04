@@ -67,6 +67,11 @@ export const api = {
       if (filters.networkTypes.length) params.set('networkType', filters.networkTypes.join(','));
       return request(`/signals?${params}`);
     },
+
+    fetchReadingsByIds(ids: string[]): Promise<{ readings: SignalLog[]; count: number }> {
+      const params = new URLSearchParams({ ids: ids.join(',') });
+      return request(`/signals/readings?${params}`);
+    },
   },
 
   heatmap: {
