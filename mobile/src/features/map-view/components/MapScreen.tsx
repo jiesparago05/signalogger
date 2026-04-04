@@ -257,7 +257,57 @@ const LEAFLET_HTML = `
       if (window._highlightMarker) { map.removeLayer(window._highlightMarker); window._highlightMarker = null; }
     }
 
+    function hideDots() {
+      markers.forEach(function(m) { map.removeLayer(m); });
+      circles.forEach(function(c) { map.removeLayer(c); });
+    }
+    function showDots() {
+      markers.forEach(function(m) { map.addLayer(m); });
+      circles.forEach(function(c) { map.addLayer(c); });
+    }
+
+    // Ungrouped reading dots for Signal Summary
+    var _ungroupedMarkers = [];
+    function showUngroupedReadings(readings) {
+      clearUngroupedReadings();
+      readings.forEach(function(r) {
+        if (!r.lat || !r.lng) return;
+        var m = L.circleMarker([r.lat, r.lng], {
+          radius: 8,
+          fillColor: r.color,
+          color: 'rgba(255,255,255,0.4)',
+          weight: 1.5,
+          fillOpacity: 0.8,
+        }).addTo(map);
+        m._readingIdx = r.idx;
+        _ungroupedMarkers.push(m);
+      });
+      // Fit map to show all ungrouped dots
+      if (_ungroupedMarkers.length > 0) {
+        var group = L.featureGroup(_ungroupedMarkers);
+        map.fitBounds(group.getBounds().pad(0.3), { animate: true, maxZoom: 18 });
+      }
+    }
+    function clearUngroupedReadings() {
+      _ungroupedMarkers.forEach(function(m) { map.removeLayer(m); });
+      _ungroupedMarkers = [];
+    }
+    function highlightUngroupedReading(idx, lat, lng, color) {
+      // Dim all ungrouped dots, highlight selected
+      _ungroupedMarkers.forEach(function(m) {
+        if (m._readingIdx === idx) {
+          m.setStyle({ radius: 14, fillColor: color, color: '#FFFFFF', weight: 3, fillOpacity: 1.0 });
+          m.bringToFront();
+        } else {
+          m.setStyle({ radius: 6, fillOpacity: 0.3, weight: 1, color: 'rgba(255,255,255,0.2)' });
+        }
+      });
+      if (window._highlightMarker) { map.removeLayer(window._highlightMarker); window._highlightMarker = null; }
+      map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: true });
+    }
+
     function highlightReading(lat, lng, color) {
+      hideDots();
       if (window._highlightMarker) { map.removeLayer(window._highlightMarker); }
       window._highlightMarker = L.circleMarker([lat, lng], {
         radius: 12,
@@ -275,6 +325,8 @@ const LEAFLET_HTML = `
     }
     function restoreMapState(lat, lng, zoom) {
       if (window._highlightMarker) { map.removeLayer(window._highlightMarker); window._highlightMarker = null; }
+      clearUngroupedReadings();
+      showDots();
       map.setView([lat, lng], zoom, { animate: true });
     }
 
@@ -461,27 +513,25 @@ export function MapScreen() {
           lastViewport.current = { bounds: viewport, zoom: data.zoom };
           fetchData(viewport, data.zoom, filters);
         } else if (data.type === 'dotTap') {
-          if (dotTooltip && dotTooltip.id === data.id) {
-            // Second tap — show full detail card
+          if (dotTooltip && dotTooltip.id === data.id && data.isConsolidated) {
+            // Second tap on consolidated dot — show Signal Summary
             setDotDetail(data);
             setDotTooltip(null);
             setSelectedReadingIdx(null);
             setShowAllReadings(false);
             webViewRef.current?.injectJavaScript('hideTooltip(); true;');
 
-            // Save map state and hide bottom sheet
+            // Save map state, hide dots, hide bottom sheet
             webViewRef.current?.injectJavaScript(`
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapState', ...JSON.parse(getMapState()) }));
+              hideDots();
               true;
             `);
             setSummaryOpen(true);
 
-            // Fetch readings if consolidated
-            if (data.isConsolidated) {
-              const c = consolidated.find((r: any) => r._id === data.id);
-              if (c?.readingIds?.length) {
-                fetchReadings(c._id, c.readingIds);
-              }
+            const c = consolidated.find((r: any) => r._id === data.id);
+            if (c?.readingIds?.length) {
+              fetchReadings(c._id, c.readingIds);
             }
           } else {
             // First tap — show tooltip
@@ -540,6 +590,9 @@ export function MapScreen() {
       return;
     }
 
+    // Don't re-add dots when signal summary is open (reading highlight controls the map)
+    if (summaryOpen) return;
+
     // Heatmap toggle is the master switch — OFF = clean map
     // Don't show heatmap during dead zone
     if (heatmapVisible && !inDeadZone) {
@@ -563,12 +616,28 @@ export function MapScreen() {
     }
 
     webViewRef.current.injectJavaScript(js + 'true;');
-  }, [signals, consolidated, heatmapTiles, heatmapVisible, inDeadZone, selectedSession]);
+  }, [signals, consolidated, heatmapTiles, heatmapVisible, inDeadZone, selectedSession, summaryOpen]);
 
   // Update overlays when data changes
   React.useEffect(() => {
     updateOverlays();
   }, [updateOverlays]);
+
+  // Show ungrouped readings on map when breakdown loads
+  React.useEffect(() => {
+    if (!summaryOpen || breakdownReadings.length === 0 || !webViewRef.current) return;
+    const readings = breakdownReadings.map((r: any, idx: number) => {
+      const dbm = r.signal?.dbm ?? r.dbm;
+      const coords = r.location?.coordinates;
+      return {
+        idx,
+        lat: coords?.[1] || 0,
+        lng: coords?.[0] || 0,
+        color: getSignalColor(dbm),
+      };
+    }).filter((r: any) => r.lat !== 0 && r.lng !== 0);
+    webViewRef.current.injectJavaScript(`showUngroupedReadings(${JSON.stringify(readings)}); true;`);
+  }, [breakdownReadings, summaryOpen]);
 
   const reportBusyRef = useRef(false);
   const handleReportSubmit = useCallback(
@@ -749,6 +818,11 @@ export function MapScreen() {
       {dotDetail && (
         <View style={styles.dotDetailOverlay}>
           <View style={styles.dotDetailCard}>
+            {/* Handle bar */}
+            <View style={{ alignItems: 'center', paddingBottom: 8 }}>
+              <View style={{ width: 36, height: 4, backgroundColor: '#374151', borderRadius: 2 }} />
+            </View>
+            <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
             <View style={styles.dotDetailHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dotDetailTitle}>{dotDetail.isConsolidated ? 'Signal Summary' : 'Signal Reading'}</Text>
@@ -841,7 +915,7 @@ export function MapScreen() {
                               setSelectedReadingIdx(idx);
                               const [lng, lat] = reading.location.coordinates;
                               webViewRef.current?.injectJavaScript(
-                                `highlightReading(${lat},${lng},'${color}'); true;`
+                                `highlightUngroupedReading(${idx},${lat},${lng},'${color}'); true;`
                               );
                             } : undefined}
                           >
@@ -866,6 +940,7 @@ export function MapScreen() {
                 )}
               </View>
             )}
+            </ScrollView>
             <View style={styles.dotDetailClose} onTouchEnd={() => {
               setDotDetail(null);
               setSummaryOpen(false);
@@ -1036,8 +1111,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     overflow: 'hidden',
   },
-  dotDetailOverlay: { position: 'absolute', top: '30%', left: 0, right: 0, padding: 16 },
-  dotDetailCard: { backgroundColor: '#111827', borderRadius: 14, borderWidth: 1, borderColor: '#374151', padding: 16 },
+  dotDetailOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: Math.round(Dimensions.get('window').height * 0.55), borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+  dotDetailCard: { backgroundColor: '#111827', flex: 1, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 },
   dotDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   dotDetailTitle: { color: '#F9FAFB', fontSize: 15, fontWeight: 'bold' },
   dotDetailSub: { color: '#9CA3AF', fontSize: 11, marginTop: 2 },
@@ -1048,7 +1123,7 @@ const styles = StyleSheet.create({
   dotDetailRangeText: { fontSize: 10 },
   dotDetailBar: { height: 6, borderRadius: 3, overflow: 'hidden', position: 'relative' },
   dotDetailBarGradient: { flex: 1, height: 6, borderRadius: 3, backgroundColor: '#EAB308' },
-  dotDetailClose: { padding: 8, alignItems: 'center' },
+  dotDetailClose: { padding: 10, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1F2937', marginTop: 4 },
   dotDetailCloseText: { color: '#9CA3AF', fontSize: 13 },
 
   // Breakdown section

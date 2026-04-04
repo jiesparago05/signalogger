@@ -108,21 +108,30 @@ export function useMapData() {
     setBreakdownReadings([]);
 
     try {
-      let readings: SignalLog[];
-      const isLocal = consolidatedId.startsWith('local_');
-      if (isLocal) {
-        // Local consolidated dot — readings are in AsyncStorage
-        readings = await getLocalReadingsByIds(readingIds);
-      } else {
-        // Server consolidated dot — fetch from API
-        const result = await api.signals.fetchReadingsByIds(readingIds);
-        readings = result.readings;
+      let readings: SignalLog[] = [];
+
+      // Try local first (always available)
+      readings = await getLocalReadingsByIds(readingIds);
+
+      // If local didn't find enough, try server
+      if (readings.length === 0) {
+        try {
+          const result = await api.signals.fetchReadingsByIds(readingIds);
+          readings = result.readings;
+        } catch {
+          // Server failed — that's ok if we have no local readings either
+        }
       }
-      const sorted = readings.sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      readingsCache.current.set(consolidatedId, sorted);
-      setBreakdownReadings(sorted);
+
+      if (readings.length === 0) {
+        setBreakdownError(true);
+      } else {
+        const sorted = readings.sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        readingsCache.current.set(consolidatedId, sorted);
+        setBreakdownReadings(sorted);
+      }
     } catch {
       setBreakdownError(true);
     } finally {
