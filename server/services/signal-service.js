@@ -48,4 +48,18 @@ async function queryByViewport(bounds, filters = {}) {
   return { fresh, consolidated };
 }
 
-module.exports = { createBatch, queryByViewport };
+async function getReadingsByIds(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error('ids must be a non-empty array');
+  }
+  if (ids.length > 100) {
+    throw new Error('Cannot fetch more than 100 readings at once');
+  }
+  const ObjectId = require('mongoose').Types.ObjectId;
+  const objectIds = ids.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+  return SignalLog.find({ _id: { $in: objectIds } })
+    .sort({ timestamp: -1 })
+    .lean();
+}
+
+module.exports = { createBatch, queryByViewport, getReadingsByIds };
