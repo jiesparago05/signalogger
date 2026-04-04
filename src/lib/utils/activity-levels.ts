@@ -33,3 +33,19 @@ export function getRouteGrade(segments: { avgDbm: number }[]): string {
   if (avg >= -100) return 'D';
   return 'F';
 }
+
+export const ACTIVITY_COLORS: Record<string, string> = {
+  gaming: '#22C55E',
+  streaming: '#84CC16',
+  browsing: '#EAB308',
+  messaging: '#F97316',
+  dead: '#EF4444',
+};
+
+export const ACTIVITY_SHORT: Record<string, string> = {
+  gaming: 'Game',
+  streaming: 'Stream',
+  browsing: 'Browse',
+  messaging: 'Msg',
+  dead: 'Dead',
+};

@@ -2,20 +2,13 @@ import React, { useEffect } from 'react';
 import { View, Text, Modal, StyleSheet, ActivityIndicator } from 'react-native';
 import { useComparison } from '../hooks/use-comparison';
 import { getCarrierColor } from '../../../lib/config';
+import { ACTIVITY_COLORS } from '../../../lib/utils/activity-levels';
 
 interface LocationComparisonProps {
   visible: boolean;
   coordinates: [number, number] | null;
   onClose: () => void;
 }
-
-const ACTIVITY_COLORS: Record<string, string> = {
-  gaming: '#22C55E',
-  streaming: '#84CC16',
-  browsing: '#EAB308',
-  messaging: '#F97316',
-  dead: '#EF4444',
-};
 
 const ACTIVITY_LABELS: Record<string, string> = {
   gaming: 'Gaming + Streaming',
