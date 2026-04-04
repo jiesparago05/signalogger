@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api/client';
-import { getLocalSignals, getLocalConsolidated } from '../../offline-sync/services/log-store';
+import { getLocalSignals, getLocalConsolidated, getLocalReadingsByIds } from '../../offline-sync/services/log-store';
 import {
   SignalLog,
   ManualReport,
@@ -108,8 +108,17 @@ export function useMapData() {
     setBreakdownReadings([]);
 
     try {
-      const result = await api.signals.fetchReadingsByIds(readingIds);
-      const sorted = result.readings.sort(
+      let readings: SignalLog[];
+      const isLocal = consolidatedId.startsWith('local_');
+      if (isLocal) {
+        // Local consolidated dot — readings are in AsyncStorage
+        readings = await getLocalReadingsByIds(readingIds);
+      } else {
+        // Server consolidated dot — fetch from API
+        const result = await api.signals.fetchReadingsByIds(readingIds);
+        readings = result.readings;
+      }
+      const sorted = readings.sort(
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
       readingsCache.current.set(consolidatedId, sorted);
