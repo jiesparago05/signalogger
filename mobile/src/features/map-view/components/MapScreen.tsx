@@ -11,6 +11,7 @@ import { useFilters } from '../hooks/use-filters';
 import { useSignalLogger } from '../../signal-logging/hooks/use-signal-logger';
 import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
+import { getActivityLevel, ACTIVITY_COLORS, ACTIVITY_SHORT } from '../../../lib/utils/activity-levels';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
 import { useSync } from '../../offline-sync/hooks/use-sync';
@@ -331,9 +332,15 @@ export function MapScreen() {
   const [dotDetail, setDotDetail] = useState<any>(null);
   const [dotTooltip, setDotTooltip] = useState<any>(null);
   const savedMapState = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [selectedReadingIdx, setSelectedReadingIdx] = useState<number | null>(null);
+  const [showAllReadings, setShowAllReadings] = useState(false);
 
   const { filters, toggleCarrier, toggleNetworkType } = useFilters();
-  const { signals, consolidated, heatmapTiles, fetchData } = useMapData();
+  const {
+    signals, consolidated, reports, heatmapTiles, isLoading, error, fetchData,
+    breakdownReadings, breakdownLoading, breakdownError, fetchReadings, clearBreakdown,
+  } = useMapData();
   const { status: syncStatus } = useSync();
 
   const { activeSession, startSession, addLog, completeSession } = useSession();
@@ -458,7 +465,24 @@ export function MapScreen() {
             // Second tap — show full detail card
             setDotDetail(data);
             setDotTooltip(null);
+            setSelectedReadingIdx(null);
+            setShowAllReadings(false);
             webViewRef.current?.injectJavaScript('hideTooltip(); true;');
+
+            // Save map state and hide bottom sheet
+            webViewRef.current?.injectJavaScript(`
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapState', ...JSON.parse(getMapState()) }));
+              true;
+            `);
+            setSummaryOpen(true);
+
+            // Fetch readings if consolidated
+            if (data.isConsolidated) {
+              const c = consolidated.find((r: any) => r._id === data.id);
+              if (c?.readingIds?.length) {
+                fetchReadings(c._id, c.readingIds);
+              }
+            }
           } else {
             // First tap — show tooltip
             setDotTooltip(data);
@@ -470,11 +494,22 @@ export function MapScreen() {
               `showTooltip(${data.lat},${data.lng},'${tooltipHtml.replace(/'/g, "\\'")}'); true;`
             );
           }
+        } else if (data.type === 'mapState') {
+          savedMapState.current = { lat: data.lat, lng: data.lng, zoom: data.zoom };
         } else if (data.type === 'mapTap') {
           // Dismiss tooltip/detail on any map tap
           if (dotTooltip || dotDetail) {
             setDotTooltip(null);
             setDotDetail(null);
+            setSummaryOpen(false);
+            setSelectedReadingIdx(null);
+            setShowAllReadings(false);
+            clearBreakdown();
+            if (savedMapState.current) {
+              const { lat, lng, zoom } = savedMapState.current;
+              webViewRef.current?.injectJavaScript(`restoreMapState(${lat},${lng},${zoom}); true;`);
+              savedMapState.current = null;
+            }
             webViewRef.current?.injectJavaScript('hideTooltip(); true;');
           } else if (compareMode) {
             setCompareCoords([data.lng, data.lat]);
@@ -483,7 +518,7 @@ export function MapScreen() {
         }
       } catch {}
     },
-    [fetchData, filters, compareMode, dotTooltip, dotDetail, signals, consolidated],
+    [fetchData, filters, compareMode, dotTooltip, dotDetail, signals, consolidated, fetchReadings, clearBreakdown],
   );
 
   // Refetch when filters change (without needing a map move)
@@ -632,6 +667,7 @@ export function MapScreen() {
       )}
 
       {/* Bottom sheet */}
+      {!summaryOpen && (
       <SwipeableSheet
         collapsedHeight={Math.round(Dimensions.get('window').height * 0.15)}
         expandedHeight={Math.round(Dimensions.get('window').height * 0.38)}
@@ -682,6 +718,7 @@ export function MapScreen() {
           </View>
         )}
       </SwipeableSheet>
+      )}
 
       {/* Session detail overlay - shows in bottom area, trail drawn on main map */}
       {selectedSession && (
@@ -753,11 +790,94 @@ export function MapScreen() {
                   </View>
                   <View style={styles.dotDetailBar}>
                     <View style={styles.dotDetailBarGradient} />
+                    {selectedReadingIdx !== null && breakdownReadings[selectedReadingIdx] && (() => {
+                      const selDbm = breakdownReadings[selectedReadingIdx].signal?.dbm ?? breakdownReadings[selectedReadingIdx].dbm;
+                      const markerPos = Math.max(0, Math.min(1, (selDbm + 120) / 70)) * 100;
+                      return (
+                        <View style={[styles.rangeMarker, { left: `${markerPos}%` }]} />
+                      );
+                    })()}
                   </View>
                 </View>
               );
             })()}
-            <View style={styles.dotDetailClose} onTouchEnd={() => { setDotDetail(null); webViewRef.current?.injectJavaScript('hideTooltip(); true;'); }}>
+            {dotDetail.isConsolidated && (
+              <View style={styles.breakdownSection}>
+                <Text style={styles.breakdownLabel}>SIGNAL BREAKDOWN</Text>
+                {breakdownLoading ? (
+                  <>
+                    {[0, 1, 2].map((i) => (
+                      <View key={i} style={styles.skeletonRow}>
+                        <View style={[styles.skeletonBlock, { width: 65 }]} />
+                        <View style={[styles.skeletonBlock, { flex: 1, marginHorizontal: 8 }]} />
+                        <View style={[styles.skeletonBlock, { width: 32 }]} />
+                      </View>
+                    ))}
+                  </>
+                ) : breakdownError ? (
+                  <Text style={styles.breakdownErrorText}>Readings unavailable offline</Text>
+                ) : (
+                  <>
+                    <ScrollView style={showAllReadings ? { maxHeight: 200 } : undefined} nestedScrollEnabled>
+                      {(showAllReadings ? breakdownReadings.slice(0, 50) : breakdownReadings.slice(0, 5)).map((reading: any, idx: number) => {
+                        const dbm = reading.signal?.dbm ?? reading.dbm;
+                        const color = getSignalColor(dbm);
+                        const normalized = Math.max(0, Math.min(1, (dbm + 120) / 70)) * 100;
+                        const activity = getActivityLevel(dbm);
+                        const isSelected = selectedReadingIdx === idx;
+                        const hasCoords = reading.location?.coordinates?.length === 2;
+                        const ts = new Date(reading.timestamp);
+                        const timeLabel = `${ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+
+                        return (
+                          <View
+                            key={reading._id || idx}
+                            style={[
+                              styles.breakdownRow,
+                              idx < (showAllReadings ? Math.min(breakdownReadings.length, 50) : Math.min(breakdownReadings.length, 5)) - 1 && styles.breakdownRowBorder,
+                              isSelected && styles.breakdownRowSelected,
+                            ]}
+                            onTouchEnd={hasCoords ? () => {
+                              setSelectedReadingIdx(idx);
+                              const [lng, lat] = reading.location.coordinates;
+                              webViewRef.current?.injectJavaScript(
+                                `highlightReading(${lat},${lng},'${color}'); true;`
+                              );
+                            } : undefined}
+                          >
+                            <Text style={[styles.breakdownTime, isSelected && { color: '#93C5FD' }]}>{timeLabel}</Text>
+                            <View style={styles.breakdownBarWrap}>
+                              <View style={[styles.breakdownBar, { width: `${normalized}%`, backgroundColor: color }]} />
+                            </View>
+                            <Text style={[styles.breakdownDbm, { color }]}>{dbm}</Text>
+                            <Text style={[styles.breakdownBadge, { color: activity.color, backgroundColor: `${activity.color}15` }]}>
+                              {ACTIVITY_SHORT[activity.level]}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                    {!showAllReadings && breakdownReadings.length > 5 && (
+                      <View style={styles.showAllBtn} onTouchEnd={() => setShowAllReadings(true)}>
+                        <Text style={styles.showAllText}>Show all ({breakdownReadings.length})</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+            <View style={styles.dotDetailClose} onTouchEnd={() => {
+              setDotDetail(null);
+              setSummaryOpen(false);
+              setSelectedReadingIdx(null);
+              setShowAllReadings(false);
+              clearBreakdown();
+              if (savedMapState.current) {
+                const { lat, lng, zoom } = savedMapState.current;
+                webViewRef.current?.injectJavaScript(`restoreMapState(${lat},${lng},${zoom}); true;`);
+                savedMapState.current = null;
+              }
+            }}>
               <Text style={styles.dotDetailCloseText}>Close</Text>
             </View>
           </View>
