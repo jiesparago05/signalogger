@@ -86,24 +86,20 @@ export function useSession() {
   const [activeSession, setActiveSession] = useState<MappingSession | null>(null);
   const logsRef = useRef<SignalLog[]>([]);
 
-  // Restore active session on app restart
+  // Recover crashed session on app restart
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(ACTIVE_SESSION_KEY);
-        if (raw) {
-          const saved = JSON.parse(raw) as MappingSession;
-          // Only restore if it's still active (not stale > 2 hours)
-          const startTime = new Date(saved.startTime).getTime();
-          const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
-          if (startTime > twoHoursAgo) {
-            setActiveSession(saved);
-          } else {
-            // Auto-complete stale session
-            await autoCompleteSession(saved);
-            await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
-          }
-        }
+        if (!raw) return;
+
+        // Clear immediately to prevent duplicate recovery on quick restart
+        await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
+
+        const saved = JSON.parse(raw) as MappingSession;
+
+        // Always recover — the background service is dead, session can't resume
+        await autoCompleteSession(saved);
       } catch {}
     })();
   }, []);
