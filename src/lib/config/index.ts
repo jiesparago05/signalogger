@@ -2,7 +2,7 @@ import { LoggingConfig, Carrier, NetworkType, ReportCategory } from '../../types
 
 export const API_BASE_URL = __DEV__
   ? 'http://localhost:3000/api' // Real device via adb reverse
-  : 'https://api.signalog.app/api'; // production (placeholder)
+  : 'https://signalogger.onrender.com/api'; // production (Render)
 
 export const CARRIERS: Carrier[] = ['Smart', 'Globe', 'TNT', 'GOMO', 'Sun', 'DITO'];
 
@@ -47,8 +47,8 @@ export const SIGNAL_STRENGTH = {
   // anything below -105 is dead/no signal
 };
 
-export const DEAD_ZONE_THRESHOLD = -105; // dBm — below this is dead zone
-export const DEAD_ZONE_CONSECUTIVE_READINGS = 2; // readings before alert
+export const DEAD_ZONE_THRESHOLD = -115; // dBm — below this is dead zone
+export const DEAD_ZONE_CONSECUTIVE_READINGS = 3; // readings before alert (3 avoids false triggers from stale startup values)
 export const DEAD_ZONE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 export const SIGNAL_COLORS = {

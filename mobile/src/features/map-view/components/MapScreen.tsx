@@ -582,6 +582,9 @@ export function MapScreen() {
   const updateOverlays = useCallback(() => {
     if (!webViewRef.current) return;
 
+    // Don't touch dots when signal summary is open (ungrouped reading dots control the map)
+    if (summaryOpen) return;
+
     let js = 'clearOverlays();';
 
     // Hide dots/heatmap when viewing a session detail (only trail shows)
@@ -589,9 +592,6 @@ export function MapScreen() {
       webViewRef.current.injectJavaScript(js + 'true;');
       return;
     }
-
-    // Don't re-add dots when signal summary is open (reading highlight controls the map)
-    if (summaryOpen) return;
 
     // Heatmap toggle is the master switch — OFF = clean map
     // Don't show heatmap during dead zone
