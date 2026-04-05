@@ -123,13 +123,25 @@ The UI can optionally show a subtle indicator for recovered sessions (e.g., smal
 
 ---
 
-## Files to Modify
+## Files Modified
 
 | File | Change |
 |------|--------|
-| `mobile/src/features/sessions/hooks/use-session.ts` | Add 60s auto-save interval, AppState listener, update `autoCompleteSession()` to always recover + recalculate from logs |
+| `mobile/src/features/sessions/hooks/use-session.ts` | `computeSessionStats` helper, 60s auto-save interval, AppState listener, always-recover on restart, `hasInitialized` race fix, `updateLocalSession` adds if not found, `autoCompleteSession` searches by ID + time range, `listSessions` merges local + server |
 
 Mirror to `src/features/sessions/hooks/use-session.ts` per architecture rule.
+
+---
+
+## Implementation Notes (bugs found during testing)
+
+1. **Persist effect race condition** — The persist effect ran with `activeSession = null` on mount and deleted `ACTIVE_SESSION_KEY` before recovery could read it. Fixed with `hasInitialized` ref.
+
+2. **Session ID mismatch** — Server replaces `local_*` ID with server ID after API call. Logs saved with local ID, but recovery searched only by server ID. Fixed by searching both sessionId AND time range, merging with dedup.
+
+3. **updateLocalSession silent failure** — If session ID wasn't in the list (due to ID change), the update was silently skipped. Fixed by adding the session if not found.
+
+4. **listSessions ignoring local sessions** — Fetched from server first and returned only server data, hiding locally-recovered sessions. Fixed by merging local + server sessions.
 
 ---
 
