@@ -85,6 +85,14 @@ function computeSessionStats(logs: SignalLog[]): {
 export function useSession() {
   const [activeSession, setActiveSession] = useState<MappingSession | null>(null);
   const logsRef = useRef<SignalLog[]>([]);
+  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const saveSessionSnapshot = useCallback(() => {
+    if (!activeSession || logsRef.current.length === 0) return;
+    const stats = computeSessionStats(logsRef.current);
+    const updated = { ...activeSession, ...stats, lastUpdated: new Date().toISOString() };
+    AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(updated)).catch(() => {});
+  }, [activeSession]);
 
   // Recover crashed session on app restart
   useEffect(() => {
@@ -112,6 +120,26 @@ export function useSession() {
       AsyncStorage.removeItem(ACTIVE_SESSION_KEY).catch(() => {});
     }
   }, [activeSession]);
+
+  // Auto-save session stats every 60 seconds
+  useEffect(() => {
+    if (activeSession) {
+      autoSaveRef.current = setInterval(() => {
+        saveSessionSnapshot();
+      }, 60000);
+    } else {
+      if (autoSaveRef.current) {
+        clearInterval(autoSaveRef.current);
+        autoSaveRef.current = null;
+      }
+    }
+    return () => {
+      if (autoSaveRef.current) {
+        clearInterval(autoSaveRef.current);
+        autoSaveRef.current = null;
+      }
+    };
+  }, [activeSession, saveSessionSnapshot]);
 
   const startSession = useCallback(async (carrier: string, networkType: string) => {
     try {
@@ -153,7 +181,11 @@ export function useSession() {
 
   const addLog = useCallback((log: SignalLog) => {
     logsRef.current.push(log);
-  }, []);
+    // Save snapshot on first log (covers short sessions killed before 60s interval)
+    if (logsRef.current.length === 1) {
+      saveSessionSnapshot();
+    }
+  }, [saveSessionSnapshot]);
 
   const completeSession = useCallback(async () => {
     if (!activeSession) return null;
