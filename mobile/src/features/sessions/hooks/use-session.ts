@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../../lib/api/client';
 import { getDeviceId } from '../../../lib/config/device';
@@ -140,6 +141,16 @@ export function useSession() {
       }
     };
   }, [activeSession, saveSessionSnapshot]);
+
+  // Save session on app background (last chance before potential OS kill)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background') {
+        saveSessionSnapshot();
+      }
+    });
+    return () => subscription.remove();
+  }, [saveSessionSnapshot]);
 
   const startSession = useCallback(async (carrier: string, networkType: string) => {
     try {
