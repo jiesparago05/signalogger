@@ -208,6 +208,10 @@ export function useSession() {
 
   const addLog = useCallback((log: SignalLog) => {
     logsRef.current.push(log);
+    // Cap at 100 to prevent memory growth — logs are already persisted individually to AsyncStorage
+    if (logsRef.current.length > 100) {
+      logsRef.current = logsRef.current.slice(-100);
+    }
     console.log('[SESSION] addLog #' + logsRef.current.length, 'sessionId:', log.sessionId);
     // Save snapshot on first log (covers short sessions killed before 60s interval)
     if (logsRef.current.length === 1) {
@@ -219,7 +223,13 @@ export function useSession() {
   const completeSession = useCallback(async () => {
     if (!activeSession) return null;
 
-    const logs = logsRef.current;
+    // Recalculate from AsyncStorage for full accuracy (logsRef is capped at 100)
+    let allLogs = await getLogsBySessionId(activeSession._id);
+    if (allLogs.length === 0 && activeSession.startTime) {
+      allLogs = await getLogsByTimeRange(new Date(activeSession.startTime), new Date());
+    }
+    // Fallback to logsRef if AsyncStorage is empty
+    const logs = allLogs.length > 0 ? allLogs : logsRef.current;
     const stats = computeSessionStats(logs);
 
     let endLocation = stats.endLocation;

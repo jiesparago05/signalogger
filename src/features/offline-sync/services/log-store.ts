@@ -23,6 +23,8 @@ async function saveSignals(signals: SignalLog[]): Promise<void> {
   await AsyncStorage.setItem(SIGNAL_KEY, JSON.stringify(signals));
 }
 
+const SIGNAL_CACHE_MAX = 500;
+
 export async function addSignalLog(log: SignalLog): Promise<void> {
   const signals = await loadSignals();
   // Generate a local ID for tracking
@@ -31,6 +33,10 @@ export async function addSignalLog(log: SignalLog): Promise<void> {
     _id: log._id || `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   };
   signals.push(logWithId);
+  // Cap in-memory cache to prevent unbounded growth during long sessions
+  while (signals.length > SIGNAL_CACHE_MAX) {
+    signals.shift();
+  }
   await saveSignals(signals);
 }
 
