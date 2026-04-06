@@ -615,7 +615,7 @@ export function MapScreen() {
 
       // Consolidated dots at zoom >= 13 (hidden at city-level zoom — heatmap only)
       if (zoom >= 13) {
-        const maxCons = 200;
+        const maxCons = zoom >= 16 ? 200 : 50;
         consolidated.slice(0, maxCons).forEach((c) => {
           const color = getSignalColor(c.avgDbm);
           js += `addConsolidatedMarker(${c.location.coordinates[1]},${c.location.coordinates[0]},'${color}',${c.count},'${c._id}');`;
