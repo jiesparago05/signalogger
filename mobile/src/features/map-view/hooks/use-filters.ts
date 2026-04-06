@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Carrier, NetworkType, FilterState } from '../../../types/signal';
 
 export function useFilters() {
@@ -6,6 +6,17 @@ export function useFilters() {
     carriers: [],
     networkTypes: [],
   });
+  const defaultSet = useRef(false);
+
+  const setDefaultCarrier = useCallback((carrier: string) => {
+    if (defaultSet.current) return;
+    defaultSet.current = true;
+    const normalized = carrier as Carrier;
+    setFilters((prev) => ({
+      ...prev,
+      carriers: prev.carriers.length === 0 ? [normalized] : prev.carriers,
+    }));
+  }, []);
 
   const toggleCarrier = useCallback((carrier: Carrier) => {
     setFilters((prev) => {
@@ -42,5 +53,6 @@ export function useFilters() {
     toggleNetworkType,
     clearFilters,
     hasActiveFilters,
+    setDefaultCarrier,
   };
 }

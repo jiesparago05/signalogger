@@ -121,7 +121,7 @@ const LEAFLET_HTML = `
 
     function addMarker(lat, lng, color, id) {
       var m = L.circleMarker([lat, lng], {
-        radius: 7, fillColor: color, fillOpacity: 0.4,
+        radius: 7, fillColor: color, fillOpacity: 0.25,
         stroke: false,
         interactive: true, bubblingMouseEvents: false,
       }).addTo(map);
@@ -144,7 +144,7 @@ const LEAFLET_HTML = `
       var m = L.circleMarker([lat, lng], {
         radius: radius,
         fillColor: color,
-        fillOpacity: 0.5,
+        fillOpacity: 0.3,
         stroke: false,
         interactive: true, bubblingMouseEvents: false,
       }).addTo(map);
@@ -392,7 +392,7 @@ export function MapScreen() {
   const [selectedReadingIdx, setSelectedReadingIdx] = useState<number | null>(null);
   const [showAllReadings, setShowAllReadings] = useState(false);
 
-  const { filters, toggleCarrier, toggleNetworkType } = useFilters();
+  const { filters, toggleCarrier, toggleNetworkType, setDefaultCarrier } = useFilters();
   const {
     signals, consolidated, reports, heatmapTiles, isLoading, error, fetchData,
     breakdownReadings, breakdownLoading, breakdownError, fetchReadings, clearBreakdown,
@@ -406,6 +406,13 @@ export function MapScreen() {
   }, [addLog]);
 
   const { isActive, currentSignal, stability, toggle } = useSignalLogger(handleNewLog, activeSession?._id);
+
+  // Default filter to user's carrier on first signal detection
+  React.useEffect(() => {
+    if (currentSignal?.carrier && currentSignal.carrier !== 'Unknown') {
+      setDefaultCarrier(currentSignal.carrier);
+    }
+  }, [currentSignal?.carrier, setDefaultCarrier]);
 
   const { inDeadZone, processReading } = useDeadZone();
 
