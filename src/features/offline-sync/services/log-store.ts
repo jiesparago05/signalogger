@@ -143,7 +143,6 @@ export interface LocalConsolidated {
 
 export async function getLocalConsolidated(swLng: number, swLat: number, neLng: number, neLat: number): Promise<LocalConsolidated[]> {
   const signals = await loadSignals();
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   const CELL = 0.0005;
 
   const groups = new Map<string, { ids: string[]; lngs: number[]; lats: number[]; dbms: number[]; timestamps: number[]; carrier: string; networkType: string }>();
@@ -152,7 +151,6 @@ export async function getLocalConsolidated(swLng: number, swLat: number, neLng: 
     if (!s.location?.coordinates) continue;
     const [lng, lat] = s.location.coordinates;
     if (lng < swLng || lng > neLng || lat < swLat || lat > neLat) continue;
-    if (new Date(s.timestamp).getTime() > cutoff) continue;
     if (s.connection?.isWifi) continue;
 
     const cellLng = Math.round(lng / CELL) * CELL;

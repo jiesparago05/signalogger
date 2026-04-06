@@ -10,12 +10,9 @@ function toCell(val) {
 }
 
 async function consolidate() {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
   const pipeline = [
     {
       $match: {
-        timestamp: { $lt: cutoff },
         consolidated: { $ne: true },
         'connection.isWifi': { $ne: true },
       },
