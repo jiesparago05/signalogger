@@ -26,8 +26,6 @@ export function useDeadZone() {
     const weakSignal = dbm > -999 && dbm < DEAD_ZONE_THRESHOLD;
     const isDead = radioOff || weakSignal;
 
-    console.log('[DeadZone]', { dbm, networkType, radioOff, weakSignal, isDead, consecutive: consecutiveDeadRef.current, wasIn: wasInDeadZoneRef.current });
-
     if (isDead) {
       consecutiveDeadRef.current += 1;
 

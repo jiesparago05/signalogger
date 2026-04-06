@@ -31,7 +31,7 @@ function computeStability(history: number[]): SignalStability | null {
   return { min, max, rangeDiff, label };
 }
 
-export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
+export function useSignalLogger(onNewLog?: (log: SignalLog) => void, sessionId?: string | null) {
   const [isActive, setIsActive] = useState(isLoggingActive());
   const [currentSignal, setCurrentSignal] = useState<RawSignalReading | null>(null);
   const [stability, setStability] = useState<SignalStability | null>(null);
@@ -48,6 +48,8 @@ export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
 
   useEffect(() => {
     setOnLog(async (log: SignalLog) => {
+      // Attach sessionId if mapping is active
+      if (sessionId) log.sessionId = sessionId;
       // Save to offline queue (including dead zone readings for location tracking)
       await addSignalLog(log);
 
@@ -65,7 +67,7 @@ export function useSignalLogger(onNewLog?: (log: SignalLog) => void) {
       }
       onNewLog?.(log);
     });
-  }, [onNewLog, addToHistory]);
+  }, [onNewLog, addToHistory, sessionId]);
 
   // Poll current signal for display (every 5s)
   useEffect(() => {

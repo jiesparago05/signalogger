@@ -64,8 +64,8 @@ export function RouteDetail({ route, onBack, onCompare }: RouteDetailProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111827' },
-  backBtn: { padding: 16, paddingTop: 48 },
+  container: { flex: 1, backgroundColor: 'rgba(17,24,39,0.95)' },
+  backBtn: { padding: 16, paddingTop: 12 },
   backText: { color: '#22C55E', fontSize: 16, fontWeight: '600' },
   content: { flex: 1, paddingHorizontal: 20 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },

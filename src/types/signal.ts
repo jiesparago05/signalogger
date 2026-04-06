@@ -22,6 +22,7 @@ export interface ConnectionData {
 
 export interface SignalLog {
   _id?: string;
+  sessionId?: string;
   timestamp: Date | string;
   location: Location;
   carrier: string;

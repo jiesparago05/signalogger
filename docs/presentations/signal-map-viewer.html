@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signalog - Live Map Viewer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0F172A; color: #F1F5F9; }
+  #map { width: 100%; height: 100vh; }
+  .info-panel {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    background: rgba(17,24,39,0.95); border: 1px solid #334155; border-radius: 12px;
+    padding: 14px 18px; min-width: 220px; backdrop-filter: blur(8px);
+  }
+  .info-panel h3 { font-size: 14px; color: #E2E8F0; margin-bottom: 8px; }
+  .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; }
+  .info-row .label { color: #94A3B8; }
+  .info-row .value { color: #E2E8F0; font-weight: 600; }
+  .legend { position: absolute; bottom: 20px; left: 10px; z-index: 1000;
+    background: rgba(17,24,39,0.95); border: 1px solid #334155; border-radius: 10px;
+    padding: 12px 16px; backdrop-filter: blur(8px);
+  }
+  .legend h4 { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #CBD5E1; padding: 2px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.3); }
+  .filter-panel {
+    position: absolute; top: 10px; left: 50px; z-index: 1000;
+    display: flex; gap: 6px;
+  }
+  .filter-btn {
+    background: rgba(17,24,39,0.9); border: 1px solid #334155; border-radius: 20px;
+    padding: 6px 14px; font-size: 11px; color: #94A3B8; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .filter-btn.active { border-color: #3B82F6; color: #3B82F6; background: rgba(59,130,246,0.1); }
+  .filter-btn:hover { border-color: #475569; }
+  .loading {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 1000;
+    background: rgba(17,24,39,0.95); border-radius: 12px; padding: 20px 30px;
+    font-size: 14px; color: #94A3B8;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div class="loading" id="loading">Loading signal data...</div>
+
+<div class="info-panel" id="info">
+  <h3>Signalog Map Viewer</h3>
+  <div class="info-row"><span class="label">Fresh signals</span><span class="value" id="freshCount">-</span></div>
+  <div class="info-row"><span class="label">Consolidated</span><span class="value" id="consCount">-</span></div>
+  <div class="info-row"><span class="label">Devices</span><span class="value" id="deviceCount">-</span></div>
+  <div class="info-row"><span class="label">Carriers</span><span class="value" id="carrierList">-</span></div>
+</div>
+
+<div class="filter-panel" id="filters"></div>
+
+<div class="legend">
+  <h4>Signal Strength</h4>
+  <div class="legend-item"><div class="legend-dot" style="background:#22C55E"></div> Strong (> -85 dBm)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EAB308"></div> Fair (-85 to -100)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div> Weak (-100 to -115)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6B7280"></div> Dead (< -115)</div>
+  <div class="legend-item" style="margin-top:6px;"><div class="legend-dot" style="background:#EAB308;width:16px;height:16px;"></div> Consolidated (2+ readings)</div>
+</div>
+
+<script>
+const API = 'https://signalogger.onrender.com/api';
+
+// PH center
+const map = L.map('map', { zoomControl: false }).setView([14.55, 121.03], 15);
+
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+function getSignalColor(dbm) {
+  if (dbm > -85) return '#22C55E';
+  if (dbm > -100) return '#EAB308';
+  if (dbm > -115) return '#EF4444';
+  return '#6B7280';
+}
+
+let allFresh = [];
+let allConsolidated = [];
+let freshMarkers = [];
+let consMarkers = [];
+let activeCarriers = new Set();
+
+function clearMarkers() {
+  freshMarkers.forEach(m => map.removeLayer(m));
+  consMarkers.forEach(m => map.removeLayer(m));
+  freshMarkers = [];
+  consMarkers = [];
+}
+
+function renderDots() {
+  clearMarkers();
+
+  allFresh.forEach(s => {
+    if (activeCarriers.size > 0 && !activeCarriers.has(s.carrier)) return;
+    const [lng, lat] = s.location.coordinates;
+    const color = getSignalColor(s.signal.dbm);
+    const m = L.circleMarker([lat, lng], {
+      radius: 6, fillColor: color, color: 'rgba(255,255,255,0.4)',
+      weight: 1, fillOpacity: 0.8
+    }).addTo(map);
+    const time = new Date(s.timestamp).toLocaleString('en-PH', {timeZone:'Asia/Manila'});
+    m.bindPopup(`<b>${s.signal.dbm} dBm</b><br>${s.carrier} &middot; ${s.networkType}<br>${time}<br><small>${s.deviceId?.substring(0,8)}...</small>`);
+    freshMarkers.push(m);
+  });
+
+  allConsolidated.forEach(c => {
+    if (activeCarriers.size > 0 && !activeCarriers.has(c.carrier)) return;
+    const [lng, lat] = c.location.coordinates;
+    const color = getSignalColor(c.avgDbm);
+    const m = L.circleMarker([lat, lng], {
+      radius: 10, fillColor: color, color: 'rgba(255,255,255,0.6)',
+      weight: 2, fillOpacity: 0.8
+    }).addTo(map);
+    m.bindPopup(`<b>${c.avgDbm} avg dBm</b> (${c.count} readings)<br>${c.carrier} &middot; ${c.networkType}<br>Range: ${c.maxDbm} to ${c.minDbm}<br>${new Date(c.firstTimestamp).toLocaleDateString()} - ${new Date(c.lastTimestamp).toLocaleDateString()}`);
+    consMarkers.push(m);
+  });
+}
+
+function buildFilters(carriers) {
+  const panel = document.getElementById('filters');
+  panel.innerHTML = '';
+
+  const allBtn = document.createElement('div');
+  allBtn.className = 'filter-btn active';
+  allBtn.textContent = 'All Carriers';
+  allBtn.onclick = () => {
+    activeCarriers.clear();
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    allBtn.classList.add('active');
+    renderDots();
+  };
+  panel.appendChild(allBtn);
+
+  carriers.forEach(c => {
+    const btn = document.createElement('div');
+    btn.className = 'filter-btn';
+    btn.textContent = c;
+    btn.onclick = () => {
+      if (activeCarriers.has(c)) {
+        activeCarriers.delete(c);
+        btn.classList.remove('active');
+      } else {
+        activeCarriers.add(c);
+        btn.classList.add('active');
+      }
+      allBtn.classList.toggle('active', activeCarriers.size === 0);
+      renderDots();
+    };
+    panel.appendChild(btn);
+  });
+}
+
+async function loadData() {
+  try {
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    const url = `${API}/signals?sw_lng=${sw.lng}&sw_lat=${sw.lat}&ne_lng=${ne.lng}&ne_lat=${ne.lat}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    allFresh = data.data || [];
+    allConsolidated = data.consolidated || [];
+
+    // Stats
+    const devices = new Set(allFresh.map(s => s.deviceId));
+    const carriers = new Set([...allFresh.map(s => s.carrier), ...allConsolidated.map(c => c.carrier)]);
+
+    document.getElementById('freshCount').textContent = allFresh.length;
+    document.getElementById('consCount').textContent = allConsolidated.length;
+    document.getElementById('deviceCount').textContent = devices.size;
+    document.getElementById('carrierList').textContent = [...carriers].join(', ');
+
+    buildFilters([...carriers].sort());
+    renderDots();
+
+    document.getElementById('loading').style.display = 'none';
+
+    // Fit bounds if we have data
+    const allCoords = [
+      ...allFresh.map(s => [s.location.coordinates[1], s.location.coordinates[0]]),
+      ...allConsolidated.map(c => [c.location.coordinates[1], c.location.coordinates[0]])
+    ];
+    if (allCoords.length > 0) {
+      map.fitBounds(allCoords, { padding: [30, 30], maxZoom: 16 });
+    }
+  } catch (e) {
+    document.getElementById('loading').textContent = 'Failed to load data: ' + e.message;
+  }
+}
+
+// Reload on map move
+let moveTimeout;
+map.on('moveend', () => {
+  clearTimeout(moveTimeout);
+  moveTimeout = setTimeout(loadData, 500);
+});
+
+// Initial load — wide PH bounds
+loadData();
+</script>
+</body>
+</html>

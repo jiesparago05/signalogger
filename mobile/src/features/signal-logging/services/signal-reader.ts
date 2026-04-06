@@ -14,7 +14,7 @@ export async function readSignal(): Promise<RawSignalReading> {
   try {
     const raw = await SignalModule.getSignalInfo();
     return {
-      carrier: raw.carrier || 'Unknown',
+      carrier: normalizeCarrier(raw.carrier || 'Unknown'),
       networkType: normalizeNetworkType(raw.networkType),
       signal: {
         dbm: raw.dbm ?? -999,
@@ -39,6 +39,26 @@ export async function readSignal(): Promise<RawSignalReading> {
       connection: { isWifi: false },
     };
   }
+}
+
+function normalizeCarrier(raw: string): string {
+  const carrierMap: Record<string, string> = {
+    'SMART': 'Smart',
+    'smart': 'Smart',
+    'Smart Communications': 'Smart',
+    'GLOBE': 'Globe',
+    'globe': 'Globe',
+    'Globe Telecom': 'Globe',
+    'TNT': 'TNT',
+    'Talk N Text': 'TNT',
+    'GOMO': 'GOMO',
+    'SUN': 'Sun',
+    'sun': 'Sun',
+    'Sun Cellular': 'Sun',
+    'DITO': 'DITO',
+    'Dito': 'DITO',
+  };
+  return carrierMap[raw] || raw;
 }
 
 function normalizeNetworkType(raw: string | number): NetworkType {

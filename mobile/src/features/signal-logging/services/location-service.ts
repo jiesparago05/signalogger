@@ -1,24 +1,74 @@
 import Geolocation from '@react-native-community/geolocation';
 import { Location } from '../../../types/signal';
 
+Geolocation.setRNConfiguration({
+  skipPermissionRequests: false,
+  authorizationLevel: 'whenInUse',
+  enableBackgroundLocationUpdates: false,
+  locationProvider: 'playServices',
+});
+
+function toLocation(position: any): Location {
+  return {
+    type: 'Point',
+    coordinates: [position.coords.longitude, position.coords.latitude],
+    accuracy: position.coords.accuracy,
+    altitude: position.coords.altitude ?? undefined,
+  };
+}
+
+let lastKnownLocation: Location | null = null;
+
 export function getCurrentLocation(): Promise<Location> {
   return new Promise((resolve, reject) => {
-    Geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          type: 'Point',
-          coordinates: [position.coords.longitude, position.coords.latitude],
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude ?? undefined,
-        });
-      },
-      (error) => reject(new Error(`Location error: ${error.message}`)),
-      {
-        enableHighAccuracy: false,
-        timeout: 20000,
-        maximumAge: 30000,
-      },
-    );
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      // Return last known location if available
+      if (lastKnownLocation) {
+        resolve(lastKnownLocation);
+      } else {
+        reject(new Error('Location request timed out'));
+      }
+    }, 15000);
+
+    try {
+      Geolocation.getCurrentPosition(
+        (position) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          lastKnownLocation = toLocation(position);
+          resolve(lastKnownLocation);
+        },
+        (error) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          // Return last known location on error
+          if (lastKnownLocation) {
+            resolve(lastKnownLocation);
+          } else {
+            reject(new Error(`Location error: ${error.message}`));
+          }
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 60000,
+        },
+      );
+    } catch (err) {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      if (lastKnownLocation) {
+        resolve(lastKnownLocation);
+      } else {
+        reject(new Error('Location unavailable'));
+      }
+    }
   });
 }
 
@@ -28,12 +78,8 @@ export function watchLocation(
 ): number {
   return Geolocation.watchPosition(
     (position) => {
-      onLocation({
-        type: 'Point',
-        coordinates: [position.coords.longitude, position.coords.latitude],
-        accuracy: position.coords.accuracy,
-        altitude: position.coords.altitude ?? undefined,
-      });
+      lastKnownLocation = toLocation(position);
+      onLocation(lastKnownLocation);
     },
     (error) => onError?.(new Error(error.message)),
     {
@@ -46,5 +92,7 @@ export function watchLocation(
 }
 
 export function clearWatch(watchId: number): void {
-  Geolocation.clearWatch(watchId);
+  try {
+    Geolocation.stopObserving();
+  } catch {}
 }

@@ -1,24 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../../lib/api/client';
 import { getDeviceId } from '../../../lib/config/device';
 import { getSignalColor } from '../../../lib/config';
 import { MappingSession } from '../../../types/signal';
 
+const SESSIONS_KEY = '@signalog_sessions';
+
 interface SessionsListProps {
   onSelectSession: (session: MappingSession) => void;
+  isMapping?: boolean;
 }
 
-export function SessionsList({ onSelectSession }: SessionsListProps) {
+export function SessionsList({ onSelectSession, isMapping }: SessionsListProps) {
   const [sessions, setSessions] = useState<MappingSession[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
+        // Load local first (instant)
+        const raw = await AsyncStorage.getItem(SESSIONS_KEY);
+        const local: MappingSession[] = raw ? JSON.parse(raw) : [];
+        if (local.length > 0) {
+          setSessions(local);
+          setLoading(false);
+        }
+
+        // Fetch server in background, merge
         const deviceId = await getDeviceId();
-        const res = await api.sessions.listByDevice(deviceId);
-        setSessions(res.data);
+        api.sessions.listByDevice(deviceId).then((res) => {
+          if (res.data && res.data.length > 0) {
+            const merged = new Map<string, MappingSession>();
+            for (const s of local) merged.set(s._id, s);
+            for (const s of res.data) merged.set(s._id, s);
+            const sorted = Array.from(merged.values()).sort(
+              (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+            );
+            setSessions(sorted);
+            AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sorted.slice(0, 50))).catch(() => {});
+          }
+        }).catch(() => {});
       } catch (err) {
         console.warn('Failed to load sessions:', err);
       } finally {
@@ -35,9 +58,24 @@ export function SessionsList({ onSelectSession }: SessionsListProps) {
     return <View style={styles.center}><Text style={styles.muted}>No sessions yet. Start mapping!</Text></View>;
   }
 
+  const completedSessions = sessions.filter((s) => s.status !== 'active');
+  const showMappingIndicator = isMapping;
+
   return (
     <ScrollView style={styles.container}>
-      {sessions.map((session) => {
+      {showMappingIndicator && (
+        <View style={[styles.card, styles.activeCard]}>
+          <View style={styles.cardTop}>
+            <View style={styles.cardLeft}>
+              <View style={styles.activeRow}>
+                <View style={styles.activeDot} />
+                <Text style={styles.activeText}>Mapping in progress...</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+      {completedSessions.map((session) => {
         const color = getSignalColor(session.avgDbm);
         const start = new Date(session.startTime);
         const end = session.endTime ? new Date(session.endTime) : null;
@@ -87,6 +125,10 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingVertical: 20 },
   muted: { color: '#9CA3AF', fontSize: 13 },
   card: { backgroundColor: '#1F2937', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#374151' },
+  activeCard: { borderColor: '#22C55E', borderWidth: 1.5 },
+  activeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
+  activeText: { color: '#4ADE80', fontSize: 14, fontWeight: '600' },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { color: '#F9FAFB', fontSize: 14, fontWeight: '600' },
   cardLeft: { flex: 1 },

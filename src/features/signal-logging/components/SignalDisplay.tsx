@@ -34,8 +34,9 @@ export function SignalDisplay({ signal, isLogging, stability, compact, inDeadZon
     );
   }
 
-  const isReading = signal.signal.dbm <= -999 && signal.networkType !== 'none';
-  const isDead = inDeadZone;
+  const noSignal = signal.networkType === 'none';
+  const isReading = signal.signal.dbm <= -999 && !noSignal;
+  const isDead = inDeadZone || noSignal;
   const color = isDead ? '#EF4444' : isReading ? '#9CA3AF' : getSignalColor(signal.signal.dbm);
   const level = isDead ? '\u2620\uFE0F Dead Zone' : isReading ? 'Reading signal...' : signalLevelLabel(signal.signal.dbm);
   const displayDbm = (isDead || isReading) ? '--' : String(signal.signal.dbm);
@@ -70,7 +71,7 @@ export function SignalDisplay({ signal, isLogging, stability, compact, inDeadZon
         </View>
         <Text style={[styles.heroLevel, { color }]}>{level}</Text>
         <Text style={styles.heroInfo}>
-          {signal.carrier} {'\u00B7'} {inDeadZone ? 'No Signal' : signal.networkType}
+          {signal.carrier} {'\u00B7'} {isDead ? 'No Signal' : signal.networkType}
           {!isDead && signal.connection.ping ? ` ${'\u00B7'} ${formatPing(signal.connection.ping)}` : ''}
         </Text>
 

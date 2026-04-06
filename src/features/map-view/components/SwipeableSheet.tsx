@@ -1,7 +1,5 @@
 import React, { useRef } from 'react';
-import { View, StyleSheet, PanResponder, Animated, Dimensions } from 'react-native';
-
-const SCREEN = Dimensions.get('window');
+import { View, StyleSheet, PanResponder, Animated } from 'react-native';
 
 interface SwipeableSheetProps {
   collapsedHeight: number;

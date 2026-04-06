@@ -1,4 +1,4 @@
-import { getSignalColor, getSignalLevel } from '../config';
+import { getSignalLevel } from '../config';
 
 export function formatDbm(dbm: number): string {
   return `${dbm} dBm`;

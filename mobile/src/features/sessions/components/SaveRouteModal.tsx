@@ -6,7 +6,7 @@ import { MappingSession, CommuteRoute } from '../../../types/signal';
 interface SaveRouteModalProps {
   visible: boolean;
   session: MappingSession;
-  onSaved: () => void;
+  onSaved: (routeId: string) => void;
   onSkip: () => void;
 }
 
@@ -14,7 +14,6 @@ export function SaveRouteModal({ visible, session, onSaved, onSkip }: SaveRouteM
   const { routes, fetchRoutes, createRoute, addSessionToRoute } = useRoutes();
   const [mode, setMode] = useState<'choose' | 'existing'>('choose');
   const [routeName, setRouteName] = useState('');
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -32,24 +31,14 @@ export function SaveRouteModal({ visible, session, onSaved, onSkip }: SaveRouteM
 
   const handleSaveNew = async () => {
     if (!routeName.trim() || !session._id) return;
-    setSaving(true);
-    try {
-      await createRoute(routeName.trim(), session._id);
-      onSaved();
-    } catch {} finally {
-      setSaving(false);
-    }
+    const route = await createRoute(routeName.trim(), session._id);
+    onSaved(route?._id || `local_${Date.now()}`);
   };
 
-  const handleAddToExisting = async (route: CommuteRoute) => {
+  const handleAddToExisting = (route: CommuteRoute) => {
     if (!session._id || !route._id) return;
-    setSaving(true);
-    try {
-      await addSessionToRoute(route._id, session._id);
-      onSaved();
-    } catch {} finally {
-      setSaving(false);
-    }
+    addSessionToRoute(route._id, session._id);
+    onSaved(route._id);
   };
 
   if (!visible) return null;
@@ -94,8 +83,8 @@ export function SaveRouteModal({ visible, session, onSaved, onSkip }: SaveRouteM
               {/* Actions */}
               <View style={styles.actions}>
                 <View
-                  style={[styles.btn, styles.btnPrimary, saving && styles.btnDisabled]}
-                  onTouchEnd={saving ? undefined : handleSaveNew}
+                  style={[styles.btn, styles.btnPrimary]}
+                  onTouchEnd={handleSaveNew}
                 >
                   <Text style={styles.btnPrimaryText}>Save as New Route</Text>
                 </View>

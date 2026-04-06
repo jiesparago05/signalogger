@@ -13,14 +13,14 @@ Real-time dead zone detection that alerts users when they enter an area with no 
 ### Trigger: Dead Zone Entry
 
 A dead zone alert fires when:
-- **2 consecutive signal readings** are below -105 dBm (the "dead" threshold)
+- **2 consecutive signal readings** are below -115 dBm (the "dead" threshold)
 - This takes ~10 seconds at the default 5-second polling interval
 - Prevents false alerts from brief signal dips
 
 ### Trigger: Signal Recovery
 
 A recovery notification fires when:
-- Signal rises **above -105 dBm** after being in a dead zone state
+- Signal rises **above -115 dBm** after being in a dead zone state
 - Immediate — no consecutive readings needed (good news is welcome instantly)
 
 ### Cooldown
@@ -99,13 +99,13 @@ Dead zone entry and exit are logged locally for later upload:
 Signal Reading Loop (every 5s):
   readSignal() → dbm value
     → useDeadZone hook receives dbm
-    → If dbm < -105: increment consecutiveDeadCount
+    → If dbm < -115: increment consecutiveDeadCount
     → If consecutiveDeadCount >= 2 AND not in cooldown:
         → Set inDeadZone = true
         → Fire local notification "Dead Zone Detected"
         → Log dead zone entry (timestamp, coords, carrier)
         → Start 5-min cooldown timer
-    → If dbm >= -105 AND inDeadZone:
+    → If dbm >= -115 AND inDeadZone:
         → Set inDeadZone = false
         → Fire local notification "Signal Recovered"
         → Log dead zone exit (timestamp, coords, duration)

@@ -22,7 +22,7 @@
 In `mobile/src/lib/config/index.ts`, after the `SIGNAL_STRENGTH` object (after line 48), add:
 
 ```typescript
-export const DEAD_ZONE_THRESHOLD = -105; // dBm — below this is dead zone
+export const DEAD_ZONE_THRESHOLD = -115; // dBm — below this is dead zone
 export const DEAD_ZONE_CONSECUTIVE_READINGS = 2; // readings before alert
 export const DEAD_ZONE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 ```
