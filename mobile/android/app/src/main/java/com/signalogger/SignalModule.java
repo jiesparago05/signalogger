@@ -65,61 +65,52 @@ public class SignalModule extends ReactContextBaseJavaModule {
             boolean isWifi = isWifiConnected();
             result.putBoolean("isWifi", isWifi);
 
-            // Signal strength from CellInfo
-            if (ContextCompat.checkSelfPermission(reactContext,
-                    Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            // Signal strength — get dbm value
+            int finalDbm = -999;
 
-                List<CellInfo> cellInfoList = tm.getAllCellInfo();
-                if (cellInfoList != null && !cellInfoList.isEmpty()) {
-                    for (CellInfo cellInfo : cellInfoList) {
-                        if (!cellInfo.isRegistered()) continue;
-
-                        if (cellInfo instanceof CellInfoLte) {
-                            CellInfoLte lte = (CellInfoLte) cellInfo;
-                            CellSignalStrengthLte ss = lte.getCellSignalStrength();
-                            result.putInt("dbm", ss.getDbm());
-                            result.putInt("rssi", ss.getRssi());
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                result.putInt("rssnr", ss.getRssnr());
-                            }
-                            result.putString("cellId",
-                                    String.valueOf(lte.getCellIdentity().getCi()));
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                result.putInt("bandFrequency",
-                                        lte.getCellIdentity().getEarfcn());
-                            }
-                            break;
-                        }
-
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                                && cellInfo instanceof CellInfoNr) {
-                            CellInfoNr nr = (CellInfoNr) cellInfo;
-                            CellSignalStrengthNr ss =
-                                    (CellSignalStrengthNr) nr.getCellSignalStrength();
-                            result.putInt("dbm", ss.getDbm());
-                            result.putInt("snr", ss.getCsiSinr());
-                            break;
-                        }
-
-                        if (cellInfo instanceof CellInfoGsm) {
-                            result.putInt("dbm",
-                                    ((CellInfoGsm) cellInfo).getCellSignalStrength().getDbm());
-                            break;
-                        }
-
-                        if (cellInfo instanceof CellInfoWcdma) {
-                            result.putInt("dbm",
-                                    ((CellInfoWcdma) cellInfo).getCellSignalStrength().getDbm());
+            // Strategy 1: SignalStrength API (works reliably on most devices)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.telephony.SignalStrength ss = tm.getSignalStrength();
+                if (ss != null) {
+                    for (android.telephony.CellSignalStrength css : ss.getCellSignalStrengths()) {
+                        int dbm = css.getDbm();
+                        if (dbm != Integer.MAX_VALUE && dbm > -999 && dbm < 0) {
+                            finalDbm = dbm;
                             break;
                         }
                     }
                 }
             }
 
-            // Default dbm if not set
-            if (!result.hasKey("dbm")) {
-                result.putInt("dbm", -999);
+            // Strategy 2: CellInfo API (more detailed but sometimes empty)
+            if (finalDbm == -999 && ContextCompat.checkSelfPermission(reactContext,
+                    Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+
+                List<CellInfo> cellInfoList = tm.getAllCellInfo();
+                if (cellInfoList != null && !cellInfoList.isEmpty()) {
+                    // Try registered cells first
+                    for (CellInfo cellInfo : cellInfoList) {
+                        if (!cellInfo.isRegistered()) continue;
+                        extractCellDbm(cellInfo, result);
+                        if (result.hasKey("dbm")) {
+                            finalDbm = result.getInt("dbm");
+                            break;
+                        }
+                    }
+                    // Try any cell
+                    if (finalDbm == -999) {
+                        for (CellInfo cellInfo : cellInfoList) {
+                            extractCellDbm(cellInfo, result);
+                            if (result.hasKey("dbm")) {
+                                finalDbm = result.getInt("dbm");
+                                break;
+                            }
+                        }
+                    }
+                }
             }
+
+            result.putInt("dbm", finalDbm);
 
             promise.resolve(result);
         } catch (Exception e) {
@@ -127,19 +118,84 @@ public class SignalModule extends ReactContextBaseJavaModule {
         }
     }
 
+    private void extractCellDbm(CellInfo cellInfo, WritableMap result) {
+        if (cellInfo instanceof CellInfoLte) {
+            CellInfoLte lte = (CellInfoLte) cellInfo;
+            CellSignalStrengthLte ss = lte.getCellSignalStrength();
+            int dbm = ss.getDbm();
+            if (dbm != Integer.MAX_VALUE && dbm > -999) {
+                result.putInt("dbm", dbm);
+                result.putInt("rssi", ss.getRssi());
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    result.putInt("rssnr", ss.getRssnr());
+                }
+                result.putString("cellId",
+                        String.valueOf(lte.getCellIdentity().getCi()));
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    result.putInt("bandFrequency",
+                            lte.getCellIdentity().getEarfcn());
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && cellInfo instanceof CellInfoNr) {
+            CellInfoNr nr = (CellInfoNr) cellInfo;
+            CellSignalStrengthNr ss =
+                    (CellSignalStrengthNr) nr.getCellSignalStrength();
+            int dbm = ss.getDbm();
+            if (dbm != Integer.MAX_VALUE && dbm > -999) {
+                result.putInt("dbm", dbm);
+                result.putInt("snr", ss.getCsiSinr());
+            }
+        } else if (cellInfo instanceof CellInfoGsm) {
+            int dbm = ((CellInfoGsm) cellInfo).getCellSignalStrength().getDbm();
+            if (dbm != Integer.MAX_VALUE && dbm > -999) {
+                result.putInt("dbm", dbm);
+            }
+        } else if (cellInfo instanceof CellInfoWcdma) {
+            int dbm = ((CellInfoWcdma) cellInfo).getCellSignalStrength().getDbm();
+            if (dbm != Integer.MAX_VALUE && dbm > -999) {
+                result.putInt("dbm", dbm);
+            }
+        }
+    }
+
     private String getNetworkType(TelephonyManager tm) {
+        String result = "none";
+
+        // Strategy 1: getDataNetworkType (requires READ_PHONE_STATE)
         if (ContextCompat.checkSelfPermission(reactContext,
-                Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            return "none";
+                Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            int type;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                type = tm.getDataNetworkType();
+            } else {
+                type = tm.getNetworkType();
+            }
+            result = mapNetworkType(type);
         }
 
-        int type;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            type = tm.getDataNetworkType();
-        } else {
-            type = tm.getNetworkType();
+        // Strategy 2: CellInfo fallback (requires ACCESS_FINE_LOCATION)
+        // Runs if Strategy 1 returned "none" — covers Globe and WiFi-data scenarios
+        if ("none".equals(result) && ContextCompat.checkSelfPermission(reactContext,
+                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                List<CellInfo> cellInfoList = tm.getAllCellInfo();
+                if (cellInfoList != null) {
+                    for (CellInfo cellInfo : cellInfoList) {
+                        if (!cellInfo.isRegistered()) continue;
+                        if (cellInfo instanceof CellInfoLte) return "4G";
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && cellInfo instanceof CellInfoNr) return "5G";
+                        if (cellInfo instanceof CellInfoWcdma) return "3G";
+                        if (cellInfo instanceof CellInfoGsm) return "2G";
+                    }
+                }
+            } catch (SecurityException ignored) {}
         }
 
+        return result;
+    }
+
+    private String mapNetworkType(int type) {
         switch (type) {
             case TelephonyManager.NETWORK_TYPE_GPRS:
             case TelephonyManager.NETWORK_TYPE_EDGE:

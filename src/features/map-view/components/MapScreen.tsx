@@ -64,7 +64,7 @@ const LEAFLET_HTML = `
 <body>
   <div id="map"></div>
   <script>
-    var map = L.map('map', { zoomControl: false }).setView([14.55, 121.0], 12);
+    var map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([14.55, 121.0], 12);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
@@ -120,12 +120,10 @@ const LEAFLET_HTML = `
     }
 
     function addMarker(lat, lng, color, id) {
-      var icon = L.divIcon({
-        className: 'signal-marker',
-        html: '<div style="width:10px;height:10px;border-radius:50%;background:' + color + ';border:1.5px solid rgba(255,255,255,0.3);box-shadow:0 0 6px ' + color + '44;"></div>',
-        iconSize: [10, 10],
-      });
-      var m = L.marker([lat, lng], { icon: icon }).addTo(map);
+      var m = L.circleMarker([lat, lng], {
+        radius: 5, fillColor: color, fillOpacity: 0.8,
+        stroke: false,
+      }).addTo(map);
       if (id) {
         m._signalogId = id;
         m._isConsolidated = false;
@@ -382,6 +380,7 @@ export function MapScreen() {
   const [routeCompareId, setRouteCompareId] = useState<string | null>(null);
   const [routeCompareName, setRouteCompareName] = useState('');
   const [dotDetail, setDotDetail] = useState<any>(null);
+  const dotDetailItemRef = useRef<any>(null);
   const [dotTooltip, setDotTooltip] = useState<any>(null);
   const savedMapState = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -515,6 +514,9 @@ export function MapScreen() {
         } else if (data.type === 'dotTap') {
           if (dotTooltip && dotTooltip.id === data.id && data.isConsolidated) {
             // Second tap on consolidated dot — show Signal Summary
+            // Snapshot the item now so it survives viewport changes
+            const item = consolidated.find((c: any) => c._id === data.id);
+            dotDetailItemRef.current = item || null;
             setDotDetail(data);
             setDotTooltip(null);
             setSelectedReadingIdx(null);
@@ -551,6 +553,7 @@ export function MapScreen() {
           if (dotTooltip || dotDetail) {
             setDotTooltip(null);
             setDotDetail(null);
+            dotDetailItemRef.current = null;
             setSummaryOpen(false);
             setSelectedReadingIdx(null);
             setShowAllReadings(false);
@@ -596,23 +599,33 @@ export function MapScreen() {
     // Heatmap toggle is the master switch — OFF = clean map
     // Don't show heatmap during dead zone
     if (heatmapVisible && !inDeadZone) {
-      signals.forEach((sig) => {
-        const color = getSignalColor(sig.signal.dbm);
-        js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}','${sig._id}');`;
-      });
+      const zoom = lastViewport.current?.zoom ?? 14;
 
-      // Consolidated dots
-      consolidated.forEach((c) => {
+      // Zoom-based rendering: individual dots only at zoom >= 16
+      if (zoom >= 16) {
+        const maxFresh = 200;
+        signals.slice(0, maxFresh).forEach((sig) => {
+          const color = getSignalColor(sig.signal.dbm);
+          js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}','${sig._id}');`;
+        });
+      }
+
+      // Consolidated dots at all zoom levels (capped at 200)
+      const maxCons = 200;
+      consolidated.slice(0, maxCons).forEach((c) => {
         const color = getSignalColor(c.avgDbm);
         js += `addConsolidatedMarker(${c.location.coordinates[1]},${c.location.coordinates[0]},'${color}',${c.count},'${c._id}');`;
       });
 
-      heatmapTiles.forEach((tile) => {
-        const color = getSignalColor(tile.avgDbm);
-        const lat = (tile.swLat + tile.neLat) / 2;
-        const lng = (tile.swLng + tile.neLng) / 2;
-        js += `addHeatCircle(${lat},${lng},300,'${color}');`;
-      });
+      // Heatmap tiles at low zoom
+      if (zoom < 16) {
+        heatmapTiles.forEach((tile) => {
+          const color = getSignalColor(tile.avgDbm);
+          const lat = (tile.swLat + tile.neLat) / 2;
+          const lng = (tile.swLng + tile.neLng) / 2;
+          js += `addHeatCircle(${lat},${lng},300,'${color}');`;
+        });
+      }
     }
 
     webViewRef.current.injectJavaScript(js + 'true;');
@@ -828,9 +841,7 @@ export function MapScreen() {
                 <Text style={styles.dotDetailTitle}>{dotDetail.isConsolidated ? 'Signal Summary' : 'Signal Reading'}</Text>
                 <Text style={styles.dotDetailSub}>
                   {(() => {
-                    const item = dotDetail.isConsolidated
-                      ? consolidated.find((c) => c._id === dotDetail.id)
-                      : signals.find((s) => s._id === dotDetail.id);
+                    const item = dotDetailItemRef.current;
                     if (!item) return '';
                     return dotDetail.isConsolidated
                       ? `${item.carrier} · ${item.networkType} · ${item.count} readings`
@@ -840,10 +851,8 @@ export function MapScreen() {
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 {(() => {
-                  const item = dotDetail.isConsolidated
-                    ? consolidated.find((c) => c._id === dotDetail.id)
-                    : signals.find((s) => s._id === dotDetail.id);
-                  const dbm = item ? (dotDetail.isConsolidated ? item.avgDbm : item.signal.dbm) : 0;
+                  const item = dotDetailItemRef.current;
+                  const dbm = item ? (dotDetail.isConsolidated ? item.avgDbm : item.signal?.dbm) : 0;
                   return (
                     <>
                       <Text style={[styles.dotDetailDbm, { color: getSignalColor(dbm) }]}>{dbm}</Text>
@@ -854,7 +863,7 @@ export function MapScreen() {
               </View>
             </View>
             {dotDetail.isConsolidated && (() => {
-              const c = consolidated.find((r) => r._id === dotDetail.id);
+              const c = dotDetailItemRef.current;
               if (!c) return null;
               return (
                 <View style={styles.dotDetailRange}>
@@ -943,6 +952,7 @@ export function MapScreen() {
             </ScrollView>
             <View style={styles.dotDetailClose} onTouchEnd={() => {
               setDotDetail(null);
+              dotDetailItemRef.current = null;
               setSummaryOpen(false);
               setSelectedReadingIdx(null);
               setShowAllReadings(false);
