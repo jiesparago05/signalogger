@@ -121,8 +121,9 @@ const LEAFLET_HTML = `
 
     function addMarker(lat, lng, color, id) {
       var m = L.circleMarker([lat, lng], {
-        radius: 5, fillColor: color, fillOpacity: 0.3,
+        radius: 7, fillColor: color, fillOpacity: 0.3,
         color: color, weight: 1.5, opacity: 0.5,
+        interactive: true,
       }).addTo(map);
       if (id) {
         m._signalogId = id;
@@ -137,15 +138,16 @@ const LEAFLET_HTML = `
     }
 
     function addConsolidatedMarker(lat, lng, color, count, id) {
-      // Scale size by count: min 7, max 14
-      var radius = Math.min(14, Math.max(7, 5 + Math.log2(count) * 2));
+      // Scale size by count: min 10, max 16 (bigger tap target)
+      var radius = Math.min(16, Math.max(10, 7 + Math.log2(count) * 2));
       var m = L.circleMarker([lat, lng], {
         radius: radius,
         fillColor: color,
         fillOpacity: 0.4,
         color: color,
-        weight: 2,
+        weight: 2.5,
         opacity: 0.7,
+        interactive: true,
       }).addTo(map);
       m._signalogId = id;
       m._isConsolidated = true;
