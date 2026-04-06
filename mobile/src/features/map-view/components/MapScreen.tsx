@@ -121,8 +121,8 @@ const LEAFLET_HTML = `
 
     function addMarker(lat, lng, color, id) {
       var m = L.circleMarker([lat, lng], {
-        radius: 7, fillColor: color, fillOpacity: 0.3,
-        color: color, weight: 1.5, opacity: 0.5,
+        radius: 7, fillColor: color, fillOpacity: 0.4,
+        stroke: false,
         interactive: true, bubblingMouseEvents: false,
       }).addTo(map);
       if (id) {
@@ -144,10 +144,8 @@ const LEAFLET_HTML = `
       var m = L.circleMarker([lat, lng], {
         radius: radius,
         fillColor: color,
-        fillOpacity: 0.4,
-        color: color,
-        weight: 2.5,
-        opacity: 0.7,
+        fillOpacity: 0.5,
+        stroke: false,
         interactive: true, bubblingMouseEvents: false,
       }).addTo(map);
       m._signalogId = id;
