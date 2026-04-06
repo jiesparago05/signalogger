@@ -121,8 +121,8 @@ const LEAFLET_HTML = `
 
     function addMarker(lat, lng, color, id) {
       var m = L.circleMarker([lat, lng], {
-        radius: 5, fillColor: color, fillOpacity: 0.8,
-        stroke: false,
+        radius: 5, fillColor: color, fillOpacity: 0.3,
+        color: color, weight: 1.5, opacity: 0.5,
       }).addTo(map);
       if (id) {
         m._signalogId = id;
@@ -140,8 +140,8 @@ const LEAFLET_HTML = `
       var icon = L.divIcon({
         className: 'consolidated-marker',
         html: '<div style="position:relative;width:18px;height:18px;">' +
-          '<div style="width:18px;height:18px;border-radius:50%;background:' + color + ';border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 8px ' + color + '66;"></div>' +
-          '<div style="position:absolute;top:-6px;right:-8px;background:#111827;color:#fff;font-size:7px;padding:1px 3px;border-radius:3px;min-width:12px;text-align:center">' + count + '\u00d7</div>' +
+          '<div style="width:18px;height:18px;border-radius:50%;background:' + color + '25;border:2.5px solid ' + color + '99;"></div>' +
+          '<div style="position:absolute;top:-6px;right:-8px;background:#111827cc;color:#fff;font-size:7px;padding:1px 3px;border-radius:3px;min-width:12px;text-align:center">' + count + '\u00d7</div>' +
           '</div>',
         iconSize: [18, 18],
       });
@@ -173,8 +173,10 @@ const LEAFLET_HTML = `
       var c = L.circle([lat, lng], {
         radius: radius,
         fillColor: color,
-        fillOpacity: 0.2,
-        stroke: false,
+        fillOpacity: 0.12,
+        color: color,
+        weight: 1,
+        opacity: 0.15,
       }).addTo(map);
       circles.push(c);
     }
@@ -610,12 +612,14 @@ export function MapScreen() {
         });
       }
 
-      // Consolidated dots at all zoom levels (capped at 200)
-      const maxCons = 200;
-      consolidated.slice(0, maxCons).forEach((c) => {
-        const color = getSignalColor(c.avgDbm);
-        js += `addConsolidatedMarker(${c.location.coordinates[1]},${c.location.coordinates[0]},'${color}',${c.count},'${c._id}');`;
-      });
+      // Consolidated dots at zoom >= 13 (hidden at city-level zoom — heatmap only)
+      if (zoom >= 13) {
+        const maxCons = 200;
+        consolidated.slice(0, maxCons).forEach((c) => {
+          const color = getSignalColor(c.avgDbm);
+          js += `addConsolidatedMarker(${c.location.coordinates[1]},${c.location.coordinates[0]},'${color}',${c.count},'${c._id}');`;
+        });
+      }
 
       // Heatmap tiles at low zoom
       if (zoom < 16) {
