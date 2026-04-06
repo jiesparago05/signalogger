@@ -137,15 +137,16 @@ const LEAFLET_HTML = `
     }
 
     function addConsolidatedMarker(lat, lng, color, count, id) {
-      var icon = L.divIcon({
-        className: 'consolidated-marker',
-        html: '<div style="position:relative;width:18px;height:18px;">' +
-          '<div style="width:18px;height:18px;border-radius:50%;background:' + color + '25;border:2.5px solid ' + color + '99;"></div>' +
-          '<div style="position:absolute;top:-6px;right:-8px;background:#111827cc;color:#fff;font-size:7px;padding:1px 3px;border-radius:3px;min-width:12px;text-align:center">' + count + '\u00d7</div>' +
-          '</div>',
-        iconSize: [18, 18],
-      });
-      var m = L.marker([lat, lng], { icon: icon }).addTo(map);
+      // Scale size by count: min 7, max 14
+      var radius = Math.min(14, Math.max(7, 5 + Math.log2(count) * 2));
+      var m = L.circleMarker([lat, lng], {
+        radius: radius,
+        fillColor: color,
+        fillOpacity: 0.4,
+        color: color,
+        weight: 2,
+        opacity: 0.7,
+      }).addTo(map);
       m._signalogId = id;
       m._isConsolidated = true;
       m.on('click', function() {
