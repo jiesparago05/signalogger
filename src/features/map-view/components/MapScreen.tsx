@@ -123,12 +123,13 @@ const LEAFLET_HTML = `
       var m = L.circleMarker([lat, lng], {
         radius: 7, fillColor: color, fillOpacity: 0.3,
         color: color, weight: 1.5, opacity: 0.5,
-        interactive: true,
+        interactive: true, bubblingMouseEvents: false,
       }).addTo(map);
       if (id) {
         m._signalogId = id;
         m._isConsolidated = false;
-        m.on('click', function() {
+        m.on('click', function(e) {
+          L.DomEvent.stopPropagation(e);
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'dotTap', id: id, isConsolidated: false, lat: lat, lng: lng
           }));
@@ -147,11 +148,12 @@ const LEAFLET_HTML = `
         color: color,
         weight: 2.5,
         opacity: 0.7,
-        interactive: true,
+        interactive: true, bubblingMouseEvents: false,
       }).addTo(map);
       m._signalogId = id;
       m._isConsolidated = true;
-      m.on('click', function() {
+      m.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'dotTap', id: id, isConsolidated: true, lat: lat, lng: lng
         }));
