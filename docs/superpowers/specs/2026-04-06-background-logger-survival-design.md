@@ -88,3 +88,14 @@ Mirror `mobile/src/` changes to `src/` per architecture rule.
 - Battery optimization / adaptive intervals
 - Location accuracy improvements (separate spec)
 - Sync reliability improvements
+
+---
+
+## Future Improvements
+
+- **AsyncStorage → SQLite/MMKV** — AsyncStorage degrades with 10k+ entries. Migrate to SQLite or MMKV for faster reads/writes at scale. Monitor log count growth to decide when.
+- **Heartbeat check on app resume** — On app foreground, check if `lastLogTimestamp > 60s ago`. If so, restart the background logger. Detects silent service death without relying solely on crash recovery.
+- **Battery optimization** — Pause logging when stationary (no movement for 5+ minutes). Reduce GPS polling to save battery during idle periods. Adaptive intervals based on movement speed.
+- **OEM-specific keep-alive** — Some Android OEMs (Xiaomi, Oppo, Vivo, Huawei) have aggressive battery optimization that kills foreground services. Add a guide or in-app prompt to whitelist Signalogger from battery optimization on those devices.
+- **Log batching for AsyncStorage writes** — Instead of writing to AsyncStorage on every single log capture (every 30s), batch 5-10 logs and write once. Reduces I/O pressure.
+- **Session trend indicator** — Since logsRef is capped at 100, live stats only reflect recent data. Add a "based on recent data" label or trend arrow (improving/declining) for transparency during long sessions.
