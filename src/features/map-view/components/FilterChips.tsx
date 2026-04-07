@@ -7,8 +7,9 @@ import {
   StyleSheet,
   Keyboard,
 } from 'react-native';
-import { CARRIERS, NETWORK_TYPES, getCarrierColor } from '../../../lib/config';
+import { NETWORK_TYPES, getCarrierColor } from '../../../lib/config';
 import { Carrier, NetworkType, FilterState } from '../../../types/signal';
+import { NETWORK_GROUPS, CARRIER_TO_NETWORK } from '../hooks/use-filters';
 
 interface SearchResult {
   display_name: string;
@@ -51,12 +52,25 @@ export function FilterChips({ filters, onToggleCarrier, onToggleNetworkType, onS
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<TextInput>(null);
 
-  const carrierLabel =
-    filters.carriers.length === 0
-      ? 'All Networks'
-      : filters.carriers.length <= 2
-        ? filters.carriers.join(' + ')
-        : `${filters.carriers.length} Networks`;
+  const carrierLabel = (() => {
+    if (filters.carriers.length === 0) return 'All Networks';
+    // Check which network groups are fully selected
+    const selectedGroups: string[] = [];
+    for (const [groupName, brands] of Object.entries(NETWORK_GROUPS)) {
+      if (brands.every((b) => filters.carriers.includes(b))) {
+        selectedGroups.push(groupName);
+      }
+    }
+    // All 3 networks selected = All Networks
+    if (selectedGroups.length === Object.keys(NETWORK_GROUPS).length) return 'All Networks';
+    if (selectedGroups.length === 1) return selectedGroups[0];
+    if (selectedGroups.length > 1) {
+      const short = selectedGroups.map((g) => g.replace(' Network', ''));
+      return short.join(' + ') + ' Networks';
+    }
+    // Partial selection fallback (shouldn't happen with group toggle)
+    return filters.carriers.join(' + ');
+  })();
 
   const networkLabel =
     filters.networkTypes.length === 0
@@ -188,17 +202,26 @@ export function FilterChips({ filters, onToggleCarrier, onToggleNetworkType, onS
 
             {openMenu === 'carrier' && (
               <View style={styles.dropdown}>
-                <View style={styles.grid}>
-                  {CARRIERS.map((item) => {
-                    const active = filters.carriers.includes(item);
-                    return (
-                      <Tap key={item} style={styles.gridItem} onPress={() => handleCarrierPress(item)}>
-                        <View style={[styles.dot, { backgroundColor: active ? getCarrierColor(item) : '#374151' }]} />
-                        <Text style={[styles.itemText, active && styles.itemTextActive]}>{item}</Text>
-                      </Tap>
-                    );
-                  })}
-                </View>
+                {Object.entries(NETWORK_GROUPS).map(([groupName, brands], gi) => {
+                  const groupActive = brands.some((b) => filters.carriers.includes(b));
+                  return (
+                    <React.Fragment key={groupName}>
+                      {gi > 0 && <View style={styles.dropdownDivider} />}
+                      {groupName !== 'DITO' && (
+                        <Text style={styles.groupHeader}>{groupName.toUpperCase()}</Text>
+                      )}
+                      {brands.map((item) => {
+                        const active = filters.carriers.includes(item);
+                        return (
+                          <Tap key={item} style={styles.listItem} onPress={() => handleCarrierPress(item)}>
+                            <View style={[styles.dot, { backgroundColor: active ? getCarrierColor(item) : '#374151' }]} />
+                            <Text style={[styles.itemText, active && styles.itemTextActive]}>{item}</Text>
+                          </Tap>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -375,16 +398,19 @@ const styles = StyleSheet.create({
     shadowRadius: 30,
     zIndex: 30,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  gridItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '50%',
-    paddingVertical: 10,
+  groupHeader: {
+    color: '#6B7280',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
     paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  dropdownDivider: {
+    height: 1,
+    backgroundColor: '#334155',
+    marginVertical: 4,
   },
   listItem: {
     flexDirection: 'row',

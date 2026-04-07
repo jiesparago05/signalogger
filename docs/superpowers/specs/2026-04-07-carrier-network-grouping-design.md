@@ -84,7 +84,7 @@ The filter chip at the top of the map should show a smart label:
 | Smart + TNT + Sun (full group) | "Smart Network" |
 | Globe + GOMO (full group) | "Globe Network" |
 | DITO | "DITO" |
-| Smart Network + Globe Network | "Smart + Globe" |
+| Smart Network + Globe Network | "Smart + Globe Networks" |
 | All 3 networks selected | "All Networks" |
 
 **Logic:** If all brands in a network group are selected, show the network name instead of listing individual brands.
