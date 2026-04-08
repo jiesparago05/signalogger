@@ -51,15 +51,26 @@ app.post('/api/admin/normalize-carriers', async (req, res) => {
     const MappingSession = require('./models/mapping-session');
     const SignalHistory = require('./models/signal-history');
     const HeatmapTile = require('./models/heatmap-tile');
-    const map = { 'SMART': 'Smart', 'GLOBE': 'Globe', 'SUN': 'Sun', 'smart': 'Smart', 'globe': 'Globe' };
+    // Regex-based normalization: matches variants like "SMART Prepaid",
+    // "Smart LTE", "Globe Telecom", "TNT Prepaid", etc.
+    // Order matters — TNT/GOMO/Sun/DITO before Smart/Globe (sub-brands).
+    const rules = [
+      { match: /talk\s*n?\s*text|tnt/i, to: 'TNT' },
+      { match: /gomo/i, to: 'GOMO' },
+      { match: /sun/i, to: 'Sun' },
+      { match: /dito/i, to: 'DITO' },
+      { match: /smart/i, to: 'Smart' },
+      { match: /globe/i, to: 'Globe' },
+    ];
     let fixed = 0;
-    for (const [from, to] of Object.entries(map)) {
-      const r1 = await SignalLog.updateMany({ carrier: from }, { $set: { carrier: to } });
-      const r2 = await ConsolidatedSignal.updateMany({ carrier: from }, { $set: { carrier: to } });
-      const r3 = await MappingSession.updateMany({ carrier: from }, { $set: { carrier: to } });
+    for (const { match, to } of rules) {
+      const filter = { carrier: { $regex: match, $nin: [to] } };
+      const r1 = await SignalLog.updateMany(filter, { $set: { carrier: to } });
+      const r2 = await ConsolidatedSignal.updateMany(filter, { $set: { carrier: to } });
+      const r3 = await MappingSession.updateMany(filter, { $set: { carrier: to } });
       // Delete aggregated data with old carrier name (will be re-aggregated by cron)
-      const r4 = await SignalHistory.deleteMany({ carrier: from }).catch(() => ({ deletedCount: 0 }));
-      const r5 = await HeatmapTile.deleteMany({ carrier: from }).catch(() => ({ deletedCount: 0 }));
+      const r4 = await SignalHistory.deleteMany({ carrier: { $regex: match, $nin: [to] } }).catch(() => ({ deletedCount: 0 }));
+      const r5 = await HeatmapTile.deleteMany({ carrier: { $regex: match, $nin: [to] } }).catch(() => ({ deletedCount: 0 }));
       fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0) + (r4.deletedCount || 0) + (r5.deletedCount || 0);
     }
     res.json({ status: 'ok', fixed });
