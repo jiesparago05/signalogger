@@ -65,13 +65,46 @@ app.post('/api/admin/normalize-carriers', async (req, res) => {
     let fixed = 0;
     for (const { match, to } of rules) {
       const filter = { carrier: { $regex: match, $nin: [to] } };
+
+      // SignalLog and MappingSession have no unique-by-carrier index, safe to bulk update
       const r1 = await SignalLog.updateMany(filter, { $set: { carrier: to } });
-      const r2 = await ConsolidatedSignal.updateMany(filter, { $set: { carrier: to } });
       const r3 = await MappingSession.updateMany(filter, { $set: { carrier: to } });
+
+      // ConsolidatedSignal has a unique index on (cellLat, cellLng, carrier, networkType)
+      // so we must merge dirty docs into existing canonical docs when there's a collision.
+      const dirtyDocs = await ConsolidatedSignal.find(filter);
+      let r2Count = 0;
+      for (const dirty of dirtyDocs) {
+        const existing = await ConsolidatedSignal.findOne({
+          cellLat: dirty.cellLat,
+          cellLng: dirty.cellLng,
+          carrier: to,
+          networkType: dirty.networkType,
+        });
+        if (!existing) {
+          dirty.carrier = to;
+          await dirty.save();
+          r2Count++;
+        } else {
+          // Merge: weighted avg, extreme min/max, summed count, union of readingIds, widest time range
+          const totalCount = existing.count + dirty.count;
+          existing.avgDbm = (existing.avgDbm * existing.count + dirty.avgDbm * dirty.count) / totalCount;
+          existing.minDbm = Math.min(existing.minDbm, dirty.minDbm);
+          existing.maxDbm = Math.max(existing.maxDbm, dirty.maxDbm);
+          existing.count = totalCount;
+          existing.firstTimestamp = new Date(Math.min(existing.firstTimestamp, dirty.firstTimestamp));
+          existing.lastTimestamp = new Date(Math.max(existing.lastTimestamp, dirty.lastTimestamp));
+          existing.readingIds = [...existing.readingIds, ...dirty.readingIds];
+          await existing.save();
+          await dirty.deleteOne();
+          r2Count++;
+        }
+      }
+
       // Delete aggregated data with old carrier name (will be re-aggregated by cron)
       const r4 = await SignalHistory.deleteMany({ carrier: { $regex: match, $nin: [to] } }).catch(() => ({ deletedCount: 0 }));
       const r5 = await HeatmapTile.deleteMany({ carrier: { $regex: match, $nin: [to] } }).catch(() => ({ deletedCount: 0 }));
-      fixed += (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0) + (r4.deletedCount || 0) + (r5.deletedCount || 0);
+      fixed += (r1.modifiedCount || 0) + r2Count + (r3.modifiedCount || 0) + (r4.deletedCount || 0) + (r5.deletedCount || 0);
     }
     res.json({ status: 'ok', fixed });
   } catch (err) {
