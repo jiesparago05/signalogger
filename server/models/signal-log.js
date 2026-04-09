@@ -35,6 +35,12 @@ const signalLogSchema = new mongoose.Schema({
     snr: Number,
     cellId: String,
     bandFrequency: Number,
+    // Phase 1 real-connectivity capture — see docs/superpowers/plans/2026-04-10-phase1-*.md
+    // All optional; old clients omit them and render as undefined on the frontend.
+    validated: Boolean,    // Android NET_CAPABILITY_VALIDATED (probabilistic)
+    downKbps: Number,      // LinkDownstreamBandwidthKbps estimate (0 = unknown)
+    upKbps: Number,        // LinkUpstreamBandwidthKbps estimate (0 = unknown)
+    dataState: String,     // connected | suspended | disconnected | connecting | unknown
   },
   connection: {
     downloadSpeed: Number,
