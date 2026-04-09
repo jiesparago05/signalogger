@@ -14,9 +14,15 @@ export async function readSignal(): Promise<RawSignalReading> {
   try {
     const raw = await SignalModule.getSignalInfo();
     return {
-      carrier: normalizeCarrier(raw.carrier || 'Unknown'),
+      carrier: normalizeCarrier(raw.carrier || 'Unknown') as Carrier,
       networkType: normalizeNetworkType(raw.networkType),
       signal: {
+        // Phase 1 real-connectivity capture — forwarded as-is from the native module.
+        // validated/downKbps/upKbps/dataState may be undefined on very old native builds.
+        validated: typeof raw.validated === 'boolean' ? raw.validated : undefined,
+        downKbps: typeof raw.downKbps === 'number' ? raw.downKbps : undefined,
+        upKbps: typeof raw.upKbps === 'number' ? raw.upKbps : undefined,
+        dataState: raw.dataState,
         dbm: raw.dbm ?? -999,
         rssi: raw.rssi,
         snr: raw.snr,
@@ -42,23 +48,19 @@ export async function readSignal(): Promise<RawSignalReading> {
 }
 
 function normalizeCarrier(raw: string): string {
-  const carrierMap: Record<string, string> = {
-    'SMART': 'Smart',
-    'smart': 'Smart',
-    'Smart Communications': 'Smart',
-    'GLOBE': 'Globe',
-    'globe': 'Globe',
-    'Globe Telecom': 'Globe',
-    'TNT': 'TNT',
-    'Talk N Text': 'TNT',
-    'GOMO': 'GOMO',
-    'SUN': 'Sun',
-    'sun': 'Sun',
-    'Sun Cellular': 'Sun',
-    'DITO': 'DITO',
-    'Dito': 'DITO',
-  };
-  return carrierMap[raw] || raw;
+  if (!raw) return 'Unknown';
+  const s = raw.toLowerCase();
+  // Keyword-based detection — handles variants like "SMART Prepaid", "Smart LTE",
+  // "Globe Telecom", "TNT Prepaid", etc. Order matters: check TNT/GOMO/Sun before
+  // Smart/Globe since they are sub-brands of Smart/Globe respectively.
+  if (s.includes('talk') && s.includes('text')) return 'TNT';
+  if (s.includes('tnt')) return 'TNT';
+  if (s.includes('gomo')) return 'GOMO';
+  if (s.includes('sun')) return 'Sun';
+  if (s.includes('dito')) return 'DITO';
+  if (s.includes('smart')) return 'Smart';
+  if (s.includes('globe')) return 'Globe';
+  return raw;
 }
 
 function normalizeNetworkType(raw: string | number): NetworkType {

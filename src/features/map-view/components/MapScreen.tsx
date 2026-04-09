@@ -12,6 +12,7 @@ import { useSignalLogger } from '../../signal-logging/hooks/use-signal-logger';
 import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
 import { getActivityLevel, ACTIVITY_SHORT } from '../../../lib/utils/activity-levels';
+import { formatRelative } from '../../../lib/utils/format-relative';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
 import { useSync } from '../../offline-sync/hooks/use-sync';
@@ -119,12 +120,16 @@ const LEAFLET_HTML = `
       circles = [];
     }
 
-    function addMarker(lat, lng, color, id) {
-      var m = L.circleMarker([lat, lng], {
+    function addMarker(lat, lng, color, id, noInternet) {
+      // Phase 1: if the reading was classified NO_INTERNET, add a visible orange
+      // ring so it stands out from "weak but working" readings of the same color.
+      var strokeOpts = noInternet
+        ? { stroke: true, color: '#FB923C', weight: 2.5, opacity: 0.95 }
+        : { stroke: false };
+      var m = L.circleMarker([lat, lng], Object.assign({
         radius: 7, fillColor: color, fillOpacity: 0.25,
-        stroke: false,
         interactive: true, bubblingMouseEvents: false,
-      }).addTo(map);
+      }, strokeOpts)).addTo(map);
       if (id) {
         m._signalogId = id;
         m._isConsolidated = false;
@@ -414,16 +419,17 @@ export function MapScreen() {
     }
   }, [currentSignal?.carrier, setDefaultCarrier]);
 
-  const { inDeadZone, processReading } = useDeadZone();
+  const { inDeadZone, deadZoneReason, processReading } = useDeadZone();
 
-  // Feed signal readings to dead zone detector
+  // Feed signal readings to dead zone detector. Passes the Phase 1 `validated` hint
+  // so the detector can distinguish NO_SIGNAL from NO_INTERNET and alert accordingly.
   React.useEffect(() => {
     if (currentSignal) {
-      processReading(
-        currentSignal.signal.dbm,
-        currentSignal.carrier,
-        currentSignal.networkType,
-      );
+      processReading({
+        dbm: currentSignal.signal.dbm,
+        validated: currentSignal.signal.validated,
+        networkType: currentSignal.networkType,
+      });
     }
   }, [currentSignal, processReading]);
 
@@ -618,7 +624,10 @@ export function MapScreen() {
         const maxFresh = 200;
         signals.slice(0, maxFresh).forEach((sig) => {
           const color = getSignalColor(sig.signal.dbm);
-          js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}','${sig._id}');`;
+          // Phase 1: flag NO_INTERNET readings (signal present, Android says internet broken)
+          // so the WebView adds a visible orange ring around these dots.
+          const noInternet = sig.signal.validated === false ? 1 : 0;
+          js += `addMarker(${sig.location.coordinates[1]},${sig.location.coordinates[0]},'${color}','${sig._id}',${noInternet});`;
         });
       }
 
@@ -735,7 +744,7 @@ export function MapScreen() {
 
       {/* Dead zone banner replaces filter chips when active */}
       {inDeadZone ? (
-        <DeadZoneBanner visible={true} />
+        <DeadZoneBanner visible={true} reason={deadZoneReason} />
       ) : (
         <FilterChips
           filters={filters}
@@ -876,6 +885,54 @@ export function MapScreen() {
                 })()}
               </View>
             </View>
+            {/* Phase 1 — freshness + validated ratio strip */}
+            {(() => {
+              const item = dotDetailItemRef.current;
+              if (!item) return null;
+              const ts = dotDetail.isConsolidated
+                ? (item.lastTimestamp || item.updatedAt)
+                : item.timestamp;
+              const freshLabel = ts ? formatRelative(ts) : null;
+
+              // Validated ratio — count breakdown readings that had validated=true
+              // vs total that had the field. Only meaningful once Phase 1 data exists.
+              let validatedLabel: string | null = null;
+              if (dotDetail.isConsolidated && breakdownReadings.length > 0) {
+                const withField = breakdownReadings.filter(
+                  (r: any) => typeof r.signal?.validated === 'boolean',
+                );
+                if (withField.length > 0) {
+                  const okCount = withField.filter((r: any) => r.signal.validated === true).length;
+                  validatedLabel = `${okCount}/${withField.length} validated`;
+                }
+              } else if (!dotDetail.isConsolidated) {
+                // Single reading — show explicit state if we have it
+                if (item.signal?.validated === true) validatedLabel = 'Internet OK';
+                else if (item.signal?.validated === false) validatedLabel = 'No internet';
+              }
+
+              if (!freshLabel && !validatedLabel) return null;
+              return (
+                <View style={styles.freshnessStrip}>
+                  {freshLabel && (
+                    <Text style={styles.freshnessText}>
+                      {'\u23F1 '}Updated {freshLabel}
+                    </Text>
+                  )}
+                  {validatedLabel && (
+                    <Text
+                      style={[
+                        styles.validatedBadge,
+                        validatedLabel.includes('No internet') && styles.validatedBadgeBad,
+                      ]}
+                    >
+                      {validatedLabel.includes('No internet') ? '\u26A0 ' : '\u2713 '}
+                      {validatedLabel}
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
             {dotDetail.isConsolidated && (() => {
               const c = dotDetailItemRef.current;
               if (!c) return null;
@@ -1142,6 +1199,10 @@ const styles = StyleSheet.create({
   dotDetailSub: { color: '#9CA3AF', fontSize: 11, marginTop: 2 },
   dotDetailDbm: { fontSize: 22, fontWeight: 'bold' },
   dotDetailDbmLabel: { color: '#9CA3AF', fontSize: 9 },
+  freshnessStrip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, paddingHorizontal: 2 },
+  freshnessText: { color: '#94A3B8', fontSize: 11 },
+  validatedBadge: { color: '#4ADE80', fontSize: 10, backgroundColor: 'rgba(34,197,94,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden', fontWeight: '600' },
+  validatedBadgeBad: { color: '#FB923C', backgroundColor: 'rgba(251,146,60,0.15)' },
   dotDetailRange: { backgroundColor: '#1F2937', borderRadius: 8, padding: 10, marginBottom: 12 },
   dotDetailRangeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   dotDetailRangeText: { fontSize: 10 },

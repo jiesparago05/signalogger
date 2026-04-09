@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.telephony.CellInfo;
@@ -64,6 +65,13 @@ public class SignalModule extends ReactContextBaseJavaModule {
             // WiFi check
             boolean isWifi = isWifiConnected();
             result.putBoolean("isWifi", isWifi);
+
+            // --- Real-connectivity capture (Phase 1) ---
+            // Adds validated/downKbps/upKbps from ConnectivityManager + dataState from TelephonyManager
+            // so the JS layer can distinguish "weak signal but internet works" from "strong signal
+            // but data suspended" etc. Null-guarded throughout — failure falls back to defaults.
+            addConnectivityInfo(result);
+            addDataState(result, tm);
 
             // Signal strength — get dbm value
             int finalDbm = -999;
@@ -232,5 +240,64 @@ public class SignalModule extends ReactContextBaseJavaModule {
             return nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
         }
         return false;
+    }
+
+    /**
+     * Captures NET_CAPABILITY_VALIDATED + LinkDownstreamBandwidthKbps + LinkUpstreamBandwidthKbps
+     * from the active network. Writes defaults (validated=false, 0/0) if anything is unavailable.
+     *
+     * Note: validated is probabilistic — it reflects Android's most recent probe, not a
+     * real-time guarantee. Treat as a hint, not ground truth. Classification and alerts on
+     * the JS side must still debounce with consecutive-reading thresholds.
+     */
+    private void addConnectivityInfo(WritableMap result) {
+        boolean validated = false;
+        int downKbps = 0;
+        int upKbps = 0;
+
+        try {
+            ConnectivityManager cm = (ConnectivityManager)
+                    reactContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network active = cm.getActiveNetwork();
+                if (active != null) {
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(active);
+                    if (caps != null) {
+                        validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+                        downKbps = caps.getLinkDownstreamBandwidthKbps();
+                        upKbps = caps.getLinkUpstreamBandwidthKbps();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Any error (SecurityException, etc.) → fall through with defaults
+        }
+
+        result.putBoolean("validated", validated);
+        result.putInt("downKbps", downKbps);
+        result.putInt("upKbps", upKbps);
+    }
+
+    /**
+     * Captures TelephonyManager.getDataState() — distinguishes CONNECTED vs SUSPENDED
+     * (data plan exhausted / throttled) vs DISCONNECTED. Helps explain the "signal bars
+     * but nothing works" mystery.
+     */
+    private void addDataState(WritableMap result, TelephonyManager tm) {
+        String dataState = "unknown";
+        try {
+            if (tm != null) {
+                switch (tm.getDataState()) {
+                    case TelephonyManager.DATA_CONNECTED:    dataState = "connected"; break;
+                    case TelephonyManager.DATA_SUSPENDED:    dataState = "suspended"; break;
+                    case TelephonyManager.DATA_DISCONNECTED: dataState = "disconnected"; break;
+                    case TelephonyManager.DATA_CONNECTING:   dataState = "connecting"; break;
+                    default:                                  dataState = "unknown"; break;
+                }
+            }
+        } catch (Exception ignored) {
+            // Fall through with "unknown"
+        }
+        result.putString("dataState", dataState);
     }
 }

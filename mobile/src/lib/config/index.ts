@@ -48,6 +48,7 @@ export const SIGNAL_STRENGTH = {
 };
 
 export const DEAD_ZONE_THRESHOLD = -115; // dBm — below this is dead zone
+export const STRONG_DBM_THRESHOLD = -95; // dBm — above this counts as "strong" signal (Phase 1)
 export const DEAD_ZONE_CONSECUTIVE_READINGS = 3; // readings before alert (3 avoids false triggers from stale startup values)
 export const DEAD_ZONE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 

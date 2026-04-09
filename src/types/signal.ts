@@ -5,12 +5,19 @@ export interface Location {
   altitude?: number;
 }
 
+export type DataState = 'connected' | 'suspended' | 'disconnected' | 'connecting' | 'unknown';
+
 export interface SignalData {
   dbm: number;
   rssi?: number;
   snr?: number;
   cellId?: string;
   bandFrequency?: number;
+  // Phase 1 real-connectivity capture — see docs/superpowers/plans/2026-04-10-phase1-*.md
+  validated?: boolean;      // Android's NET_CAPABILITY_VALIDATED (probabilistic, not real-time)
+  downKbps?: number;        // LinkDownstreamBandwidthKbps estimate (0 = unknown)
+  upKbps?: number;          // LinkUpstreamBandwidthKbps estimate (0 = unknown)
+  dataState?: DataState;    // TelephonyManager.getDataState()
 }
 
 export interface ConnectionData {
