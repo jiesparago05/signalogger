@@ -25,15 +25,31 @@ async function saveLocalSession(session: MappingSession): Promise<void> {
   await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.slice(0, 50)));
 }
 
+async function renameLocalSession(oldId: string, serverSession: MappingSession): Promise<void> {
+  const sessions = await loadLocalSessions();
+  const idx = sessions.findIndex((s) => s._id === oldId);
+  if (idx < 0) {
+    // Old id already gone (e.g., completion removed it). Insert server record as-is.
+    sessions.unshift(serverSession);
+  } else {
+    // Merge: preserve any local-only fields (startLocation from getCurrentLocation),
+    // overlay server data, use server's _id.
+    sessions[idx] = { ...sessions[idx], ...serverSession, _id: serverSession._id };
+  }
+  await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.slice(0, 50)));
+}
+
 async function updateLocalSession(sessionId: string, updates: Partial<MappingSession>): Promise<void> {
   const sessions = await loadLocalSessions();
   const idx = sessions.findIndex((s) => s._id === sessionId);
-  if (idx >= 0) {
-    sessions[idx] = { ...sessions[idx], ...updates };
-  } else {
-    // Session not in list (e.g., ID changed by server) — add it
-    sessions.unshift({ _id: sessionId, ...updates } as MappingSession);
+  if (idx < 0) {
+    // Do NOT create orphans — prior behavior silently spawned partial sessions missing
+    // required fields (startTime, carrier, distanceMeters) when the caller raced with
+    // an id swap from the server. Just warn and skip.
+    console.warn('[SESSION] updateLocalSession: id not found, skipping:', sessionId);
+    return;
   }
+  sessions[idx] = { ...sessions[idx], ...updates };
   await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.slice(0, 50)));
 }
 
@@ -192,13 +208,21 @@ export function useSession() {
       setActiveSession(created);
       logsRef.current = [];
 
+      // Track the current canonical id for this session — swapped atomically when
+      // the server returns a real _id. Late async callbacks below read this ref so
+      // they always target the latest id, never a stale local_ id.
+      const currentIdRef = { current: created._id };
+
       getCurrentLocation().then((loc) => {
         created.startLocation = { type: 'Point' as const, coordinates: loc.coordinates };
-        updateLocalSession(created._id, { startLocation: created.startLocation }).catch(() => {});
+        updateLocalSession(currentIdRef.current, { startLocation: created.startLocation }).catch(() => {});
       }).catch(() => {});
 
-      api.sessions.create(session).then((serverSession) => {
-        updateLocalSession(created._id, { ...serverSession, _id: serverSession._id });
+      api.sessions.create(session).then(async (serverSession) => {
+        // Atomically rename local_XXX -> serverSession._id in the list, then record the
+        // new id for any pending getCurrentLocation callback that hasn't fired yet.
+        await renameLocalSession(currentIdRef.current, serverSession);
+        currentIdRef.current = serverSession._id;
         setActiveSession(serverSession);
       }).catch(() => {});
     } catch (err) {
@@ -226,7 +250,10 @@ export function useSession() {
     // Recalculate from AsyncStorage for full accuracy (logsRef is capped at 100)
     let allLogs = await getLogsBySessionId(activeSession._id);
     if (allLogs.length === 0 && activeSession.startTime) {
-      allLogs = await getLogsByTimeRange(new Date(activeSession.startTime), new Date());
+      const byTime = await getLogsByTimeRange(new Date(activeSession.startTime), new Date());
+      // Reject logs tagged with a different sessionId (would indicate concurrent
+      // session overlap — only accept this session's logs or untagged legacy ones).
+      allLogs = byTime.filter((l) => !l.sessionId || l.sessionId === activeSession._id);
     }
     // Fallback to logsRef if AsyncStorage is empty
     const logs = allLogs.length > 0 ? allLogs : logsRef.current;
@@ -291,6 +318,11 @@ export function useSession() {
 async function autoCompleteSession(session: MappingSession): Promise<void> {
   try {
     console.log('[SESSION] autoComplete start, id:', session._id, 'startTime:', session.startTime);
+    // Freeze the recovery window BEFORE any awaits. If the user taps "Start Mapping"
+    // while this function is still running, the new session's logs could otherwise
+    // leak into this recovered session via the time-range fallback below.
+    const recoveryCutoff = new Date();
+
     // Collect logs from both sessionId match AND time range (covers ID changes from server sync)
     const logMap = new Map<string, SignalLog>();
 
@@ -300,9 +332,13 @@ async function autoCompleteSession(session: MappingSession): Promise<void> {
       byId.forEach((l) => logMap.set(l._id || `${l.timestamp}`, l));
     }
     if (session.startTime) {
-      const byTime = await getLogsByTimeRange(new Date(session.startTime), new Date());
-      console.log('[SESSION] logs by time:', byTime.length);
-      byTime.forEach((l) => logMap.set(l._id || `${l.timestamp}`, l));
+      const byTime = await getLogsByTimeRange(new Date(session.startTime), recoveryCutoff);
+      // Only accept logs that belong to THIS session or are untagged. Reject logs
+      // tagged with a DIFFERENT sessionId — those belong to a new session the user
+      // started while recovery was still processing.
+      const filtered = byTime.filter((l) => !l.sessionId || l.sessionId === session._id);
+      console.log('[SESSION] logs by time:', byTime.length, 'filtered to:', filtered.length);
+      filtered.forEach((l) => logMap.set(l._id || `${l.timestamp}`, l));
     }
 
     const logs = Array.from(logMap.values());

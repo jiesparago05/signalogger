@@ -22,7 +22,12 @@ export function SessionsList({ onSelectSession, isMapping }: SessionsListProps) 
       try {
         // Load local first (instant)
         const raw = await AsyncStorage.getItem(SESSIONS_KEY);
-        const local: MappingSession[] = raw ? JSON.parse(raw) : [];
+        const rawLocal: MappingSession[] = raw ? JSON.parse(raw) : [];
+        // Drop orphan/partial sessions (missing startTime — created by an old race bug)
+        const local = rawLocal.filter((s) => !!s.startTime);
+        if (local.length !== rawLocal.length) {
+          await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(local.slice(0, 50))).catch(() => {});
+        }
         if (local.length > 0) {
           setSessions(local);
           setLoading(false);
@@ -76,13 +81,17 @@ export function SessionsList({ onSelectSession, isMapping }: SessionsListProps) 
         </View>
       )}
       {completedSessions.map((session) => {
-        const color = getSignalColor(session.avgDbm);
-        const start = new Date(session.startTime);
+        const color = getSignalColor(session.avgDbm ?? 0);
+        const start = session.startTime ? new Date(session.startTime) : null;
         const end = session.endTime ? new Date(session.endTime) : null;
-        const dateStr = start.toLocaleDateString([], { month: 'short', day: 'numeric' });
-        const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const endTimeStr = end ? end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...';
-        const distKm = (session.distanceMeters / 1000).toFixed(1);
+        const isValidStart = start && !isNaN(start.getTime());
+        const isValidEnd = end && !isNaN(end.getTime());
+        const dateStr = isValidStart ? start!.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—';
+        const timeStr = isValidStart ? start!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+        const endTimeStr = isValidEnd ? end!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...';
+        const distKm = ((session.distanceMeters ?? 0) / 1000).toFixed(1);
+        const carrierLabel = session.carrier || '—';
+        const networkLabel = session.networkType || '—';
 
         return (
           <View key={session._id} style={styles.card} onTouchEnd={() => onSelectSession(session)}>
@@ -94,11 +103,11 @@ export function SessionsList({ onSelectSession, isMapping }: SessionsListProps) 
                     : `${dateStr}, ${timeStr} — ${endTimeStr}`}
                 </Text>
                 <Text style={styles.cardInfo}>
-                  {session.startLocationName ? `${dateStr} · ` : ''}{distKm} km · {session.carrier} · {session.networkType}
+                  {session.startLocationName ? `${dateStr} · ` : ''}{distKm} km · {carrierLabel} · {networkLabel}
                 </Text>
               </View>
               <View style={styles.cardRight}>
-                <Text style={[styles.cardDbm, { color }]}>{session.avgDbm}</Text>
+                <Text style={[styles.cardDbm, { color }]}>{session.avgDbm ?? '—'}</Text>
                 <Text style={styles.cardDbmLabel}>avg dBm</Text>
               </View>
             </View>
