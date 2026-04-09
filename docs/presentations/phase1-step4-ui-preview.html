@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 1 Step 4 — UI Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F172A; color: #F1F5F9; line-height: 1.6; padding-bottom: 80px; }
+
+  nav { position: fixed; top: 0; left: 0; right: 0; background: rgba(15,23,42,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid #1E293B; z-index: 100; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  nav .logo { font-weight: 700; font-size: 18px; color: #3B82F6; }
+  nav .sep { color: #334155; }
+  nav .title { color: #94A3B8; font-size: 14px; }
+  nav .pill { margin-left: auto; background: rgba(59,130,246,0.15); color: #3B82F6; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+
+  section { padding: 60px 40px 40px; max-width: 1200px; margin: 0 auto; }
+  section:first-of-type { padding-top: 100px; }
+  @media (max-width: 768px) { section { padding: 40px 20px; } section:first-of-type { padding-top: 80px; } }
+
+  h1 { font-size: 42px; font-weight: 800; margin-bottom: 8px; background: linear-gradient(135deg, #3B82F6, #8B5CF6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.15; }
+  h2 { font-size: 28px; font-weight: 700; margin-bottom: 24px; color: #E2E8F0; }
+  h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #CBD5E1; }
+  .subtitle { font-size: 17px; color: #94A3B8; margin-bottom: 48px; max-width: 700px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #64748B; margin-bottom: 16px; }
+  p { color: #94A3B8; margin-bottom: 12px; }
+  code { background: #0D1117; border: 1px solid #21262D; border-radius: 4px; padding: 2px 6px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 13px; color: #7EE787; }
+
+  /* Cards */
+  .card { background: #1E293B; border-radius: 16px; padding: 24px; border: 1px solid #334155; }
+
+  /* State cards grid */
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-top: 32px; }
+  .state-card { background: #1E293B; border-radius: 16px; padding: 24px; border: 1px solid #334155; position: relative; overflow: hidden; }
+  .state-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .state-card.ok::before { background: #22C55E; }
+  .state-card.weak::before { background: #F59E0B; }
+  .state-card.no-internet::before { background: linear-gradient(90deg, #DC2626 50%, #FB923C 50%); }
+  .state-card.no-signal::before { background: #7F1D1D; }
+
+  .state-card .state-dot-wrap { display: flex; justify-content: center; padding: 20px 0; }
+  .state-card .big-dot { width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); }
+  .state-card .big-dot.ok { background: #22C55E; box-shadow: 0 0 24px rgba(34,197,94,0.5); }
+  .state-card .big-dot.weak { background: #F59E0B; box-shadow: 0 0 24px rgba(245,158,11,0.5); }
+  .state-card .big-dot.no-internet { background: #DC2626; box-shadow: 0 0 24px rgba(220,38,38,0.5); border: 4px solid #FB923C; width: 56px; height: 56px; }
+  .state-card .big-dot.no-signal { background: #7F1D1D; box-shadow: 0 0 24px rgba(127,29,29,0.6); }
+
+  .state-card .state-name { font-size: 20px; font-weight: 700; text-align: center; color: #F1F5F9; margin-bottom: 4px; }
+  .state-card .state-name.ok { color: #4ADE80; }
+  .state-card .state-name.weak { color: #FCD34D; }
+  .state-card .state-name.no-internet { color: #FCA5A5; }
+  .state-card .state-name.no-signal { color: #FCA5A5; }
+  .state-card .state-desc { font-size: 13px; color: #94A3B8; text-align: center; margin-bottom: 16px; min-height: 40px; }
+
+  .state-card .conditions { background: #0D1117; border: 1px solid #21262D; border-radius: 8px; padding: 12px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 11px; color: #C9D1D9; line-height: 1.6; margin-bottom: 12px; }
+  .state-card .conditions .key { color: #FF7B72; }
+  .state-card .conditions .val { color: #79C0FF; }
+  .state-card .conditions .cmt { color: #6A737D; }
+  .state-card .alerts { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; text-align: center; padding: 6px 12px; border-radius: 20px; font-weight: 600; }
+  .state-card .alerts.silent { background: rgba(100,116,139,0.15); color: #94A3B8; }
+  .state-card .alerts.fire { background: rgba(239,68,68,0.15); color: #EF4444; }
+
+  /* Phone mockup */
+  .phone-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-top: 32px; align-items: start; }
+  .phone { width: 100%; max-width: 340px; margin: 0 auto; background: #000; border-radius: 36px; padding: 12px; border: 3px solid #1E293B; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .phone-screen { background: #0F172A; border-radius: 24px; overflow: hidden; position: relative; aspect-ratio: 9/19; }
+  .phone-caption { text-align: center; margin-top: 12px; font-size: 13px; color: #64748B; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
+
+  /* Phone content — map area */
+  .map-bg { position: absolute; inset: 0; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+  .map-bg::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle at 30% 30%, rgba(59,130,246,0.05), transparent 40%), radial-gradient(circle at 70% 70%, rgba(139,92,246,0.05), transparent 40%); }
+  .road { position: absolute; background: rgba(100,116,139,0.15); border-radius: 2px; }
+  .phone-header { position: absolute; top: 48px; left: 0; right: 0; padding: 0 16px; display: flex; gap: 8px; z-index: 5; }
+  .phone-header .pill { background: rgba(15,23,42,0.9); border: 1px solid #334155; padding: 6px 12px; border-radius: 20px; font-size: 11px; color: #CBD5E1; display: flex; align-items: center; gap: 5px; backdrop-filter: blur(6px); }
+  .phone-header .search-btn { width: 32px; height: 32px; background: rgba(15,23,42,0.9); border: 1px solid #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #94A3B8; backdrop-filter: blur(6px); }
+
+  /* Map dots on phone */
+  .map-dot { position: absolute; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.5); }
+  .map-dot.tiny { width: 8px; height: 8px; }
+  .map-dot.sm { width: 10px; height: 10px; }
+  .map-dot.md { width: 13px; height: 13px; }
+  .map-dot.lg { width: 17px; height: 17px; border-width: 2px; }
+  .map-dot.ok { background: #22C55E; }
+  .map-dot.weak { background: #F59E0B; }
+  .map-dot.no-internet { background: #DC2626; border: 2.5px solid #FB923C; }
+  .map-dot.no-signal { background: #7F1D1D; }
+  .map-dot.ok.glow { box-shadow: 0 0 8px rgba(34,197,94,0.7); }
+  .map-dot.weak.glow { box-shadow: 0 0 8px rgba(245,158,11,0.7); }
+  .map-dot.no-internet.glow { box-shadow: 0 0 10px rgba(251,146,60,0.5), 0 0 6px rgba(220,38,38,0.5); }
+
+  /* Legend on phone */
+  .phone-legend { position: absolute; bottom: 20px; left: 16px; background: rgba(15,23,42,0.95); border: 1px solid #334155; border-radius: 12px; padding: 12px; backdrop-filter: blur(8px); z-index: 5; }
+  .phone-legend .lg-title { font-size: 9px; color: #64748B; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px; font-weight: 700; }
+  .phone-legend .lg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .phone-legend .lg-row:last-child { margin-bottom: 0; }
+  .phone-legend .lg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.3); }
+  .phone-legend .lg-dot.ok { background: #22C55E; }
+  .phone-legend .lg-dot.weak { background: #F59E0B; }
+  .phone-legend .lg-dot.no-internet { background: #DC2626; border: 1.5px solid #FB923C; }
+  .phone-legend .lg-dot.no-signal { background: #7F1D1D; }
+  .phone-legend .lg-text { font-size: 10px; color: #CBD5E1; }
+
+  /* Tooltip mockup */
+  .tooltip-preview { position: absolute; top: 140px; left: 50%; transform: translateX(-50%); background: rgba(15,23,42,0.98); border: 1px solid #334155; border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); min-width: 180px; backdrop-filter: blur(8px); z-index: 6; }
+  .tooltip-preview::after { content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 10px; height: 10px; background: rgba(15,23,42,0.98); border-right: 1px solid #334155; border-bottom: 1px solid #334155; }
+  .tooltip-preview .carrier-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #F1F5F9; font-weight: 600; margin-bottom: 4px; }
+  .tooltip-preview .carrier-row .carrier-dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; }
+  .tooltip-preview .dbm-val { font-size: 15px; font-weight: 700; color: #4ADE80; margin-bottom: 6px; }
+  .tooltip-preview .meta-row { font-size: 10px; color: #64748B; margin-bottom: 2px; display: flex; align-items: center; gap: 4px; }
+  .tooltip-preview .meta-row .icon { opacity: 0.7; }
+  .tooltip-preview .confidence { font-size: 10px; color: #94A3B8; margin-top: 6px; padding-top: 6px; border-top: 1px solid #1E293B; }
+
+  /* Dead zone banner mockups */
+  .banner-row { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+  .banner-demo { flex: 1; min-width: 280px; background: #1E293B; border-radius: 16px; padding: 20px; border: 1px solid #334155; }
+  .banner-demo .dm-label { font-size: 11px; color: #64748B; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px; font-weight: 700; }
+  .banner { padding: 12px 16px; flex-direction: row; display: flex; align-items: center; gap: 10px; border-radius: 20px; }
+  .banner.no-signal { background: rgba(239, 68, 68, 0.95); }
+  .banner.no-internet { background: rgba(220, 38, 38, 0.95); border: 2px solid rgba(251, 146, 60, 0.9); }
+  .banner .b-icon { font-size: 16px; }
+  .banner .b-text { display: flex; flex-direction: column; gap: 2px; }
+  .banner .b-title { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+  .banner .b-sub { color: rgba(255,255,255,0.7); font-size: 10px; }
+
+  .banner-demo .trigger-cond { margin-top: 16px; background: #0D1117; border: 1px solid #21262D; border-radius: 8px; padding: 10px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 10px; color: #C9D1D9; line-height: 1.6; }
+  .banner-demo .trigger-cond .cmt { color: #6A737D; }
+  .banner-demo .trigger-cond .kw { color: #FF7B72; }
+  .banner-demo .trigger-cond .str { color: #A5D6FF; }
+
+  /* Signal summary card */
+  .summary-wrap { display: grid; grid-template-columns: 340px 1fr; gap: 40px; margin-top: 32px; align-items: start; }
+  @media (max-width: 820px) { .summary-wrap { grid-template-columns: 1fr; } }
+  .summary-card { background: #1E293B; border-radius: 20px; border: 1px solid #334155; overflow: hidden; }
+  .summary-card .sc-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+  .summary-card .sc-title { font-size: 14px; color: #94A3B8; font-weight: 600; }
+  .summary-card .sc-close { color: #64748B; font-size: 18px; }
+  .summary-card .sc-body { padding: 20px; }
+  .summary-card .sc-state-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .summary-card .sc-state-dot { width: 44px; height: 44px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 20px rgba(34,197,94,0.4); border: 2px solid rgba(255,255,255,0.3); flex-shrink: 0; }
+  .summary-card .sc-state-name { font-size: 22px; font-weight: 800; color: #4ADE80; line-height: 1; }
+  .summary-card .sc-state-sub { font-size: 12px; color: #64748B; margin-top: 3px; }
+  .summary-card .sc-readings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .summary-card .sc-metric { background: #0F172A; border: 1px solid #334155; border-radius: 10px; padding: 10px; text-align: center; }
+  .summary-card .sc-metric .mk-val { font-size: 16px; font-weight: 700; color: #F1F5F9; }
+  .summary-card .sc-metric .mk-lbl { font-size: 9px; color: #64748B; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+  .summary-card .sc-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .summary-card .sc-badge { font-size: 10px; padding: 4px 9px; border-radius: 20px; font-weight: 600; }
+  .summary-card .sc-badge.carrier { background: rgba(255,0,106,0.18); color: #FF6B9E; }
+  .summary-card .sc-badge.network { background: rgba(59,130,246,0.15); color: #60A5FA; }
+  .summary-card .sc-badge.validated { background: rgba(34,197,94,0.15); color: #4ADE80; }
+  .summary-card .sc-confidence { background: #0F172A; border-left: 3px solid #3B82F6; border-radius: 4px; padding: 10px 12px; margin-top: 4px; }
+  .summary-card .sc-confidence .conf-label { font-size: 10px; color: #64748B; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 4px; }
+  .summary-card .sc-confidence .conf-val { font-size: 12px; color: #CBD5E1; }
+  .summary-card .sc-confidence .conf-val strong { color: #F1F5F9; }
+  .summary-card .sc-freshness { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748B; margin-top: 12px; }
+  .summary-card .sc-freshness .f-dot { width: 6px; height: 6px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+
+  /* Freshness examples table */
+  .freshness-table { margin-top: 16px; background: #0D1117; border: 1px solid #21262D; border-radius: 8px; overflow: hidden; }
+  .freshness-table .row { display: flex; padding: 10px 14px; border-bottom: 1px solid #21262D; font-size: 12px; align-items: center; gap: 16px; }
+  .freshness-table .row:last-child { border-bottom: none; }
+  .freshness-table .age { color: #64748B; font-family: 'Fira Code', 'Consolas', monospace; min-width: 110px; }
+  .freshness-table .label { color: #C9D1D9; flex: 1; font-family: 'Fira Code', 'Consolas', monospace; margin: 0; }
+  .freshness-table .indicator { width: 8px; height: 8px; border-radius: 50%; }
+  .freshness-table .indicator.fresh { background: #22C55E; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+  .freshness-table .indicator.recent { background: #84CC16; }
+  .freshness-table .indicator.stale { background: #F59E0B; }
+  .freshness-table .indicator.old { background: #64748B; }
+
+  /* Two-column layout for section content */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 32px; }
+  @media (max-width: 820px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Footer */
+  footer { text-align: center; padding: 40px 20px; color: #475569; font-size: 12px; border-top: 1px solid #1E293B; margin-top: 60px; }
+  footer a { color: #64748B; text-decoration: none; border-bottom: 1px dashed #334155; padding-bottom: 1px; }
+
+  /* Badge styles for copy consistency */
+  .inline-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .inline-badge.green { background: rgba(34,197,94,0.15); color: #4ADE80; }
+  .inline-badge.orange { background: rgba(245,158,11,0.15); color: #FCD34D; }
+  .inline-badge.red { background: rgba(239,68,68,0.15); color: #FCA5A5; }
+  .inline-badge.darkred { background: rgba(127,29,29,0.25); color: #FCA5A5; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Signalog</div>
+  <div class="sep">/</div>
+  <div class="title">Phase 1 · Step 4 — UI Preview</div>
+  <div class="pill">DRAFT</div>
+</nav>
+
+<section>
+  <div class="label">Preview · not yet implemented</div>
+  <h1>From a signal meter<br>to a connectivity map</h1>
+  <p class="subtitle">Step 4 introduces a 4-state classification into the map UI, replacing the old dBm-only gradient. It also surfaces <strong>sample count</strong> (so users can trust crowd data), <strong>freshness</strong> (how recent a reading is), and differentiates the dead-zone banner between "no signal" and "no internet" — the two most confusing cases a user can hit.</p>
+</section>
+
+<section>
+  <div class="label">The four states</div>
+  <h2>Every dot means something now</h2>
+  <p>Instead of a single dBm gradient (green → red), every reading classifies into one of four states. The classification uses both signal strength <em>and</em> Android's own <code>NET_CAPABILITY_VALIDATED</code> probe — which is how the app distinguishes "weak signal but internet works" from "strong signal but data is suspended."</p>
+
+  <div class="state-grid">
+    <div class="state-card ok">
+      <div class="state-dot-wrap"><div class="big-dot ok"></div></div>
+      <div class="state-name ok">OK</div>
+      <div class="state-desc">Strong signal AND Android confirms internet is working.</div>
+      <div class="conditions">
+        <span class="cmt">// classifyZone()</span><br>
+        <span class="key">dbm</span> &gt; <span class="val">-95</span> &amp;&amp;<br>
+        <span class="key">validated</span> === <span class="val">true</span>
+      </div>
+      <div class="alerts silent">No alert</div>
+    </div>
+
+    <div class="state-card weak">
+      <div class="state-dot-wrap"><div class="big-dot weak"></div></div>
+      <div class="state-name weak">WEAK</div>
+      <div class="state-desc">Working but degraded. Ambiguous readings land here — e.g., signal OK but Android hasn't probed yet.</div>
+      <div class="conditions">
+        <span class="cmt">// everything in between</span><br>
+        <span class="key">dbm</span> &gt; <span class="val">-115</span> &amp;&amp;<br>
+        <span class="key">validated</span> !== <span class="val">false</span>
+      </div>
+      <div class="alerts silent">No alert</div>
+    </div>
+
+    <div class="state-card no-internet">
+      <div class="state-dot-wrap"><div class="big-dot no-internet"></div></div>
+      <div class="state-name no-internet">NO INTERNET</div>
+      <div class="state-desc">Signal is fine, but Android confirmed the internet is broken. Usually means data plan exhausted or backhaul failure.</div>
+      <div class="conditions">
+        <span class="cmt">// explicit false only</span><br>
+        <span class="key">validated</span> === <span class="val">false</span>
+      </div>
+      <div class="alerts fire">Fires alert (new)</div>
+    </div>
+
+    <div class="state-card no-signal">
+      <div class="state-dot-wrap"><div class="big-dot no-signal"></div></div>
+      <div class="state-name no-signal">NO SIGNAL</div>
+      <div class="state-desc">Radio off, native read failed, or signal below the dead-zone threshold. No data possible.</div>
+      <div class="conditions">
+        <span class="key">dbm</span> &lt;= <span class="val">-115</span> ||<br>
+        <span class="key">dbm</span> === <span class="val">-999</span> ||<br>
+        <span class="key">networkType</span> === <span class="val">'none'</span>
+      </div>
+      <div class="alerts fire">Fires alert</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="label">Before / After</div>
+  <h2>On the map</h2>
+  <p>Same location, same readings — different story. The new color scheme visually separates the "works but slow" cases from the "genuinely broken" ones.</p>
+
+  <div class="phone-grid">
+    <!-- BEFORE -->
+    <div>
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="map-bg"></div>
+          <div class="road" style="top:0; left:48%; bottom:0; width:18px;"></div>
+          <div class="road" style="top:52%; left:0; right:0; height:18px;"></div>
+          <div class="road" style="top:25%; left:20%; width:60%; height:12px; transform:rotate(28deg); transform-origin:0 50%;"></div>
+
+          <div class="phone-header">
+            <div class="search-btn">🔍</div>
+            <div class="pill">Globe Network ▾</div>
+            <div class="pill">All Types ▾</div>
+          </div>
+
+          <!-- Old-scheme dots: dBm gradient (red → yellow → green) -->
+          <div class="map-dot md" style="background:#22C55E; left:28%; top:32%;"></div>
+          <div class="map-dot md" style="background:#84CC16; left:32%; top:35%;"></div>
+          <div class="map-dot md" style="background:#EAB308; left:36%; top:38%;"></div>
+          <div class="map-dot md" style="background:#F97316; left:40%; top:41%;"></div>
+          <div class="map-dot md" style="background:#EF4444; left:44%; top:44%;"></div>
+          <div class="map-dot sm" style="background:#F97316; left:50%; top:48%;"></div>
+          <div class="map-dot md" style="background:#F97316; left:55%; top:52%;"></div>
+          <div class="map-dot md" style="background:#EF4444; left:60%; top:55%;"></div>
+          <div class="map-dot md" style="background:#EAB308; left:65%; top:59%;"></div>
+          <div class="map-dot sm" style="background:#F97316; left:70%; top:62%;"></div>
+          <div class="map-dot sm" style="background:#EF4444; left:73%; top:66%;"></div>
+          <div class="map-dot md" style="background:#EAB308; left:52%; top:72%;"></div>
+          <div class="map-dot sm" style="background:#22C55E; left:35%; top:70%;"></div>
+          <div class="map-dot sm" style="background:#84CC16; left:30%; top:75%;"></div>
+
+          <div class="phone-legend">
+            <div class="lg-title">Legend (old)</div>
+            <div class="lg-row"><div class="lg-dot" style="background:#22C55E;"></div><div class="lg-text">Excellent</div></div>
+            <div class="lg-row"><div class="lg-dot" style="background:#EAB308;"></div><div class="lg-text">Moderate</div></div>
+            <div class="lg-row"><div class="lg-dot" style="background:#F97316;"></div><div class="lg-text">Weak</div></div>
+            <div class="lg-row"><div class="lg-dot" style="background:#EF4444;"></div><div class="lg-text">Dead</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-caption">Before — dBm gradient only</div>
+    </div>
+
+    <!-- AFTER -->
+    <div>
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="map-bg"></div>
+          <div class="road" style="top:0; left:48%; bottom:0; width:18px;"></div>
+          <div class="road" style="top:52%; left:0; right:0; height:18px;"></div>
+          <div class="road" style="top:25%; left:20%; width:60%; height:12px; transform:rotate(28deg); transform-origin:0 50%;"></div>
+
+          <div class="phone-header">
+            <div class="search-btn">🔍</div>
+            <div class="pill">Globe Network ▾</div>
+            <div class="pill">All Types ▾</div>
+          </div>
+
+          <!-- New-scheme dots: 4 classifications -->
+          <div class="map-dot md ok glow" style="left:28%; top:32%;"></div>
+          <div class="map-dot md ok glow" style="left:32%; top:35%;"></div>
+          <div class="map-dot md weak" style="left:36%; top:38%;"></div>
+          <div class="map-dot md weak" style="left:40%; top:41%;"></div>
+          <div class="map-dot md no-signal glow" style="left:44%; top:44%;"></div>
+          <div class="map-dot sm weak" style="left:50%; top:48%;"></div>
+          <div class="map-dot md weak" style="left:55%; top:52%;"></div>
+          <div class="map-dot lg no-internet glow" style="left:60%; top:55%;"></div>
+          <div class="map-dot md weak" style="left:65%; top:59%;"></div>
+          <div class="map-dot sm weak" style="left:70%; top:62%;"></div>
+          <div class="map-dot sm no-signal" style="left:73%; top:66%;"></div>
+          <div class="map-dot md weak" style="left:52%; top:72%;"></div>
+          <div class="map-dot sm ok glow" style="left:35%; top:70%;"></div>
+          <div class="map-dot sm ok glow" style="left:30%; top:75%;"></div>
+
+          <!-- Tooltip pointing to the NO_INTERNET dot -->
+          <div class="tooltip-preview" style="top: 38%; left: 60%; transform: translateX(-50%);">
+            <div class="carrier-row"><div class="carrier-dot" style="background:#DC2626;"></div>Globe · 4G</div>
+            <div class="dbm-val" style="color:#FCA5A5;">-78 dBm</div>
+            <div class="meta-row"><span class="icon">📊</span>Based on 47 readings</div>
+            <div class="meta-row"><span class="icon">⏱</span>Updated 12 min ago</div>
+            <div class="confidence" style="color:#FB923C;">⚠ No internet validated</div>
+          </div>
+
+          <div class="phone-legend">
+            <div class="lg-title">Legend (new)</div>
+            <div class="lg-row"><div class="lg-dot ok"></div><div class="lg-text">OK</div></div>
+            <div class="lg-row"><div class="lg-dot weak"></div><div class="lg-text">Weak</div></div>
+            <div class="lg-row"><div class="lg-dot no-internet"></div><div class="lg-text">No internet</div></div>
+            <div class="lg-row"><div class="lg-dot no-signal"></div><div class="lg-text">No signal</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-caption">After — 4-state classification</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="label">Signal Summary bottom sheet</div>
+  <h2>Confidence and freshness</h2>
+  <p>When a user opens the Signal Summary for a consolidated dot, they now see <strong>how many readings</strong> the data is based on and <strong>when</strong> the most recent one was captured. Without these, crowd-sourced data is hard to trust — a single stale reading and a fresh 100-sample average look identical.</p>
+
+  <div class="summary-wrap">
+    <div class="summary-card">
+      <div class="sc-header">
+        <div class="sc-title">Signal Summary</div>
+        <div class="sc-close">×</div>
+      </div>
+      <div class="sc-body">
+        <div class="sc-state-row">
+          <div class="sc-state-dot"></div>
+          <div>
+            <div class="sc-state-name">OK</div>
+            <div class="sc-state-sub">Signal strong · internet confirmed</div>
+          </div>
+        </div>
+        <div class="sc-readings">
+          <div class="sc-metric">
+            <div class="mk-val" style="color:#4ADE80;">-74</div>
+            <div class="mk-lbl">Avg dBm</div>
+          </div>
+          <div class="sc-metric">
+            <div class="mk-val" style="color:#4ADE80;">-68</div>
+            <div class="mk-lbl">Best</div>
+          </div>
+          <div class="sc-metric">
+            <div class="mk-val" style="color:#FCD34D;">-89</div>
+            <div class="mk-lbl">Worst</div>
+          </div>
+        </div>
+        <div class="sc-badges">
+          <div class="sc-badge carrier">● GOMO</div>
+          <div class="sc-badge network">4G</div>
+          <div class="sc-badge validated">✓ 46/47 validated</div>
+        </div>
+        <div class="sc-confidence">
+          <div class="conf-label">Data confidence</div>
+          <div class="conf-val">Based on <strong>47 readings</strong> from 3 devices over the past 2 hours</div>
+        </div>
+        <div class="sc-freshness">
+          <div class="f-dot"></div>
+          Updated 12 min ago
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3>What's new in the summary</h3>
+      <p style="margin-bottom: 8px;">✔ <strong>Classification state</strong> replaces the raw dBm-only header. "OK" instead of just "-74 dBm avg."</p>
+      <p style="margin-bottom: 8px;">✔ <strong>Sample count badge</strong> — "Based on 47 readings" — lets a user know whether they should trust the data.</p>
+      <p style="margin-bottom: 8px;">✔ <strong>Validated ratio</strong> — when consolidated data has the new fields, show "46/47 validated" so users can see whether most of those readings had internet.</p>
+      <p style="margin-bottom: 8px;">✔ <strong>Freshness dot</strong> — green when &lt; 1 hr, gray when old. "Updated 12 min ago."</p>
+      <p style="margin-bottom: 8px;">✔ Falls back gracefully when sample count is 1 or when old readings don't have the new fields — shows "Single reading" or omits validated entirely.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 40px; margin-bottom: 12px;">Freshness formatter — examples</h3>
+  <div class="freshness-table">
+    <div class="row"><div class="indicator fresh"></div><div class="age">30 sec ago</div><div class="label">formatRelative(30_000)</div></div>
+    <div class="row"><div class="indicator fresh"></div><div class="age">just now</div><div class="label">formatRelative(20_000)</div></div>
+    <div class="row"><div class="indicator fresh"></div><div class="age">12 min ago</div><div class="label">formatRelative(720_000)</div></div>
+    <div class="row"><div class="indicator recent"></div><div class="age">2 hr ago</div><div class="label">formatRelative(7_200_000)</div></div>
+    <div class="row"><div class="indicator stale"></div><div class="age">1 day ago</div><div class="label">formatRelative(86_400_000)</div></div>
+    <div class="row"><div class="indicator old"></div><div class="age">3 days ago</div><div class="label">formatRelative(259_200_000)</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="label">Dead zone banner</div>
+  <h2>Two reasons, two messages</h2>
+  <p>The existing banner fires on one condition: dBm below threshold. Step 4 differentiates the root cause. "Dead Zone" and "No Internet — Signal OK" look different and say different things because they require different user action.</p>
+
+  <div class="banner-row">
+    <div class="banner-demo">
+      <div class="dm-label">NO_SIGNAL (existing behavior)</div>
+      <div class="banner no-signal">
+        <div class="b-icon">⚠️</div>
+        <div class="b-text">
+          <div class="b-title">Dead Zone — No Signal</div>
+          <div class="b-sub">Data will sync when signal returns</div>
+        </div>
+      </div>
+      <div class="trigger-cond">
+        <span class="cmt">// fires when...</span><br>
+        <span class="kw">dbm</span> &lt;= <span class="str">-115</span> || <span class="kw">dbm</span> === <span class="str">-999</span><br>
+        <span class="cmt">// OR networkType === 'none'</span>
+      </div>
+    </div>
+
+    <div class="banner-demo">
+      <div class="dm-label">NO_INTERNET (new)</div>
+      <div class="banner no-internet">
+        <div class="b-icon">⚠️</div>
+        <div class="b-text">
+          <div class="b-title">No Internet — Signal OK</div>
+          <div class="b-sub">Check your data plan or network status</div>
+        </div>
+      </div>
+      <div class="trigger-cond">
+        <span class="cmt">// fires when...</span><br>
+        <span class="kw">validated</span> === <span class="str">false</span><br>
+        <span class="cmt">// for 3 consecutive readings</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 32px;">
+    <h3>Why two banners?</h3>
+    <p style="margin-bottom: 10px;">The user actions are <strong>completely different</strong>:</p>
+    <p style="margin-bottom: 10px;"><span class="inline-badge red">NO SIGNAL</span> &nbsp;→ wait, move to higher ground, try the other SIM. <em>Nothing works.</em></p>
+    <p><span class="inline-badge red" style="border: 1px solid #FB923C;">NO INTERNET</span> &nbsp;→ check load balance, restart mobile data, check roaming. <em>Signal bars are present — the problem is elsewhere.</em></p>
+  </div>
+</section>
+
+<section>
+  <div class="label">Step 4 scope — plan check</div>
+  <h2>What this step covers</h2>
+
+  <div class="two-col">
+    <div class="card">
+      <h3 style="color:#4ADE80;">✓ In scope for Step 4</h3>
+      <p style="margin-bottom: 6px;">→ New 4-state dot colors (including orange ring for NO_INTERNET)</p>
+      <p style="margin-bottom: 6px;">→ Updated map legend</p>
+      <p style="margin-bottom: 6px;">→ Sample count in dot tooltips ("Based on N readings")</p>
+      <p style="margin-bottom: 6px;">→ Freshness formatter + "Updated N ago" text</p>
+      <p style="margin-bottom: 6px;">→ Signal Summary bottom sheet: classification, sample count, freshness, validated ratio</p>
+      <p style="margin-bottom: 6px;">→ Dead zone banner differentiation (already in Step 2 — will just verify the reason prop flow)</p>
+      <p>→ Bottom sheet overlap check (per CLAUDE.md rule)</p>
+    </div>
+
+    <div class="card">
+      <h3 style="color:#FCD34D;">⊘ Deferred</h3>
+      <p style="margin-bottom: 6px;">→ Time-of-day hour filter — Phase 2</p>
+      <p style="margin-bottom: 6px;">→ Preset buttons (Morning Rush etc.) — Phase 3</p>
+      <p style="margin-bottom: 6px;">→ Active HTTP HEAD probes to ground-truth validated</p>
+      <p style="margin-bottom: 6px;">→ Opportunistic throughput sampling</p>
+      <p style="margin-bottom: 6px;">→ downKbps-driven classification (captured, not used)</p>
+      <p>→ Separate "suspended" banner state (collapsed into NO_INTERNET for now)</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Preview doc for Phase 1 · Step 4 — <a href="../superpowers/plans/2026-04-10-phase1-real-connectivity-capture.md">full plan</a>
+</footer>
+
+</body>
+</html>
