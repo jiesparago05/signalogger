@@ -44,6 +44,23 @@ app.post('/api/admin/consolidate', async (req, res) => {
   }
 });
 
+// Delete all signal logs for a given deviceId. Used for removing test/dummy
+// records. Matches SignalLog only — does not touch ConsolidatedSignal, since
+// consolidated docs aggregate across multiple devices.
+app.post('/api/admin/delete-by-device', async (req, res) => {
+  try {
+    const deviceId = req.query.deviceId || req.body?.deviceId;
+    if (!deviceId) {
+      return res.status(400).json({ error: 'deviceId is required (query or body)' });
+    }
+    const SignalLog = require('./models/signal-log');
+    const result = await SignalLog.deleteMany({ deviceId });
+    res.json({ status: 'ok', deleted: result.deletedCount, deviceId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/normalize-carriers', async (req, res) => {
   try {
     const SignalLog = require('./models/signal-log');
