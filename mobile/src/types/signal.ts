@@ -38,6 +38,7 @@ export interface SignalLog {
   connection: ConnectionData;
   deviceId: string;
   synced: boolean;
+  clientVersion?: string; // e.g. "1.1.0" — set by background-logger from APP_VERSION
 }
 
 export interface ManualReport {

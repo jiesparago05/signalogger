@@ -62,6 +62,9 @@ const signalLogSchema = new mongoose.Schema({
     default: false,
     index: true,
   },
+  // Client build identifier (e.g. "1.1.0"). Optional — old clients omit it.
+  // Lets us diagnose which build a reading came from without needing device owner input.
+  clientVersion: String,
 });
 
 signalLogSchema.index({ location: '2dsphere' });

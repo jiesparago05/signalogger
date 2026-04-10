@@ -5,6 +5,7 @@ import { distanceBetween } from '../../../lib/utils/signal-helpers';
 import { getDeviceId } from '../../../lib/config/device';
 import { LoggingConfig, SignalLog, Location } from '../../../types/signal';
 import { DEFAULT_LOGGING_CONFIG } from '../../../lib/config';
+import { APP_VERSION } from '../../../lib/config/app-version';
 
 type OnLogCallback = (log: SignalLog) => void;
 
@@ -46,6 +47,7 @@ async function captureSignalLog(): Promise<SignalLog | null> {
       connection: signal.connection,
       deviceId,
       synced: false,
+      clientVersion: APP_VERSION,
     };
 
     return log;
