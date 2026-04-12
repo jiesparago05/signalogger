@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../../lib/api/client';
 import { getDeviceId } from '../../../lib/config/device';
 import { getSignalColor } from '../../../lib/config';
-import { APP_VERSION } from '../../../lib/config/app-version';
 import { MappingSession } from '../../../types/signal';
 
 const SESSIONS_KEY = '@signalog_sessions';
@@ -126,9 +125,6 @@ export function SessionsList({ onSelectSession, isMapping }: SessionsListProps) 
           </View>
         );
       })}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Signalog v{APP_VERSION}</Text>
-      </View>
     </ScrollView>
   );
 }
@@ -155,6 +151,4 @@ const styles = StyleSheet.create({
   range: { color: '#9CA3AF', fontSize: 10 },
   routeSaved: { color: '#22C55E', fontSize: 10, marginLeft: 'auto' },
   routeUnsaved: { color: '#9CA3AF', fontSize: 10, marginLeft: 'auto' },
-  footer: { alignItems: 'center', paddingVertical: 16, paddingBottom: 32 },
-  footerText: { color: '#4B5563', fontSize: 10, fontFamily: 'monospace', letterSpacing: 0.5 },
 });

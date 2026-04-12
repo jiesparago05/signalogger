@@ -13,6 +13,7 @@ import { useSession } from '../../sessions/hooks/use-session';
 import { getSignalColor } from '../../../lib/config';
 import { getActivityLevel, ACTIVITY_SHORT } from '../../../lib/utils/activity-levels';
 import { formatRelative } from '../../../lib/utils/format-relative';
+import { APP_VERSION } from '../../../lib/config/app-version';
 import { ViewportBounds, SignalLog } from '../../../types/signal';
 import { getCurrentLocation, watchLocation, clearWatch } from '../../signal-logging/services/location-service';
 import { useSync } from '../../offline-sync/hooks/use-sync';
@@ -806,6 +807,7 @@ export function MapScreen() {
                 {isActive ? 'Stop Mapping' : inDeadZone ? 'No Signal' : 'Start Mapping'}
               </Text>
             </View>
+            <Text style={styles.versionLabel}>Signalog v{APP_VERSION}</Text>
           </View>
         )}
 
@@ -1181,6 +1183,14 @@ const styles = StyleSheet.create({
   },
   ctaTextDisabled: {
     color: '#9CA3AF',
+  },
+  versionLabel: {
+    color: '#4B5563',
+    fontSize: 10,
+    fontFamily: 'monospace',
+    textAlign: 'center',
+    marginTop: 6,
+    letterSpacing: 0.5,
   },
   sessionOverlay: {
     position: 'absolute',

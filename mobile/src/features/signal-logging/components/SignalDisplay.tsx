@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   },
   heroContainer: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 8,
     paddingHorizontal: 20,
   },
   heroTop: {
@@ -152,21 +152,21 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   heroLevel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 1,
   },
   heroInfo: {
     color: '#9CA3AF',
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: 12,
+    marginTop: 2,
   },
   stabilityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 4,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
