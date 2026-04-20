@@ -15,4 +15,7 @@
 // - 1.1.0 — Phase 1 real-connectivity (validated / downKbps / dataState,
 //           4-state classification, differentiated dead zone banner,
 //           Signal Summary freshness + validated ratio). 2026-04-10.
-export const APP_VERSION = '1.1.0';
+// - 1.1.1 — Route Comparison per-km trail with on-tap segment label.
+// - 1.1.2 — Cleanup of orphaned background service notification on app
+//           startup. Fixes "stuck foreground notification" after app kill.
+export const APP_VERSION = '1.1.2';

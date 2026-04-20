@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MapScreen } from './src/features/map-view/components/MapScreen';
+import { cleanupStaleService } from './src/features/signal-logging/services/background-logger';
 
 async function requestPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
@@ -34,6 +35,11 @@ function App() {
   const [permChecked, setPermChecked] = useState(false);
 
   useEffect(() => {
+    // Clean up any orphaned background service + notification from a prior
+    // session that was killed abruptly (force-stopped, OOM killed, etc).
+    // Runs before permissions to ensure the stale notification clears ASAP.
+    cleanupStaleService().catch(() => {});
+
     requestPermissions().then((granted) => {
       setPermGranted(granted);
       setPermChecked(true);

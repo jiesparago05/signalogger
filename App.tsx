@@ -9,42 +9,22 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MapScreen } from './src/features/map-view/components/MapScreen';
+import { cleanupStaleService } from './src/features/signal-logging/services/background-logger';
 
 async function requestPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
 
   try {
-    // First request foreground location + phone state
     const granted = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
       PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
     ]);
 
-    const locationGranted =
+    return (
       granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === 'granted' &&
-      granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === 'granted';
-
-    if (!locationGranted) return false;
-
-    // Then request background location separately (Android 10+)
-    if (Platform.Version >= 29) {
-      const bgResult = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
-        {
-          title: 'Background Location',
-          message:
-            'Signalog needs background location access to log signal strength while the app is minimized.',
-          buttonPositive: 'Allow',
-        },
-      );
-      // Background location is optional — app still works without it
-      if (bgResult !== 'granted') {
-        console.log('Background location not granted — logging will only work in foreground');
-      }
-    }
-
-    return true;
+      granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === 'granted'
+    );
   } catch {
     return false;
   }
@@ -55,6 +35,11 @@ function App() {
   const [permChecked, setPermChecked] = useState(false);
 
   useEffect(() => {
+    // Clean up any orphaned background service + notification from a prior
+    // session that was killed abruptly (force-stopped, OOM killed, etc).
+    // Runs before permissions to ensure the stale notification clears ASAP.
+    cleanupStaleService().catch(() => {});
+
     requestPermissions().then((granted) => {
       setPermGranted(granted);
       setPermChecked(true);
@@ -65,7 +50,7 @@ function App() {
     return (
       <View style={styles.loading}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#22C55E" />
+        <ActivityIndicator size="large" color="#533483" />
       </View>
     );
   }

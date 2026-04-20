@@ -150,3 +150,26 @@ export async function stopLogging(): Promise<void> {
   isLogging = false;
   lastLocation = null;
 }
+
+/**
+ * Unconditionally stop any lingering background service on app startup.
+ * Fixes the "orphaned foreground service notification" bug — if the app was
+ * force-killed or crashed, the Android foreground service can keep its
+ * notification alive indefinitely ("Signalog · 12h ago") and the user
+ * can't dismiss it because Android treats it as ongoing.
+ *
+ * Calling BackgroundService.stop() here removes the native service AND its
+ * notification, regardless of whatever the JS `isLogging` flag thinks.
+ * Safe to call even when nothing is running — it's a no-op in that case.
+ */
+export async function cleanupStaleService(): Promise<void> {
+  try {
+    if (BackgroundService.isRunning()) {
+      await BackgroundService.stop();
+    }
+  } catch (error) {
+    console.warn('Failed to cleanup stale background service:', error);
+  }
+  isLogging = false;
+  lastLocation = null;
+}
