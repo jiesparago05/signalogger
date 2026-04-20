@@ -2,11 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useComparison } from '../hooks/use-comparison';
 import { ACTIVITY_COLORS, ACTIVITY_SHORT } from '../../../lib/utils/activity-levels';
+import { api } from '../../../lib/api/client';
+
+export interface RouteSegmentGeo {
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  color: string;
+  label: string;
+}
 
 interface RouteComparisonProps {
   routeId: string;
   routeName: string;
   onBack: () => void;
+  onDrawSegments?: (segments: RouteSegmentGeo[]) => void;
+  onHighlightSegment?: (index: number) => void;
+  onClearHighlight?: () => void;
 }
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -17,13 +30,36 @@ const ACTIVITY_LABELS: Record<string, string> = {
   dead: 'Dead Zone',
 };
 
-export function RouteComparison({ routeId, routeName, onBack }: RouteComparisonProps) {
+export function RouteComparison({ routeId, routeName, onBack, onDrawSegments, onHighlightSegment, onClearHighlight }: RouteComparisonProps) {
   const { routeData, loading, compareRoute } = useComparison();
   const [showSegments, setShowSegments] = useState(false);
+  const [selectedSegIdx, setSelectedSegIdx] = useState<number | null>(null);
 
   useEffect(() => {
     compareRoute(routeId);
   }, [routeId, compareRoute]);
+
+  // Fetch full route for segment coordinates and draw on map.
+  // The `cancelled` flag prevents a stale API response from redrawing
+  // the trail after the user has already pressed Back (unmounting this component).
+  useEffect(() => {
+    if (!onDrawSegments) return;
+    let cancelled = false;
+    api.routes.getById(routeId).then((route) => {
+      if (cancelled || !route?.segments?.length) return;
+      const geoSegs: RouteSegmentGeo[] = route.segments.map((seg) => ({
+        startLat: seg.startLocation.coordinates[1],
+        startLng: seg.startLocation.coordinates[0],
+        endLat: seg.endLocation.coordinates[1],
+        endLng: seg.endLocation.coordinates[0],
+        color: ACTIVITY_COLORS[seg.activityLevel] || '#EF4444',
+        label: seg.label,
+      }));
+      onDrawSegments(geoSegs);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeId]);
 
   if (loading || !routeData) {
     return (
@@ -125,10 +161,23 @@ export function RouteComparison({ routeId, routeName, onBack }: RouteComparisonP
                 </View>
                 {segments.map((seg: any, i: number) => {
                   const allDead = seg.carriers.every((c: any) => c.activityLevel === 'dead');
+                  const isSelected = selectedSegIdx === i;
                   return (
-                    <View key={i} style={[styles.segRow, styles.segDataRow, allDead && styles.segRowDead]}>
+                    <View
+                      key={i}
+                      style={[styles.segRow, styles.segDataRow, allDead && styles.segRowDead, isSelected && styles.segRowSelected]}
+                      onTouchEnd={() => {
+                        if (selectedSegIdx === i) {
+                          setSelectedSegIdx(null);
+                          onClearHighlight?.();
+                        } else {
+                          setSelectedSegIdx(i);
+                          onHighlightSegment?.(i);
+                        }
+                      }}
+                    >
                       <View style={styles.segLabelCol}>
-                        <Text style={styles.segLabel}>{allDead ? '\u26A0\uFE0F ' : ''}{seg.label}</Text>
+                        <Text style={[styles.segLabel, isSelected && styles.segLabelSelected]}>{allDead ? '\u26A0\uFE0F ' : ''}{seg.label}</Text>
                       </View>
                       {allCarriers.map(carrier => {
                         const found = seg.carriers.find((c: any) => c.carrier === carrier);
@@ -212,6 +261,8 @@ const styles = StyleSheet.create({
   segRow: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8 },
   segDataRow: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.03)' },
   segRowDead: { backgroundColor: 'rgba(239,68,68,0.03)' },
+  segRowSelected: { backgroundColor: 'rgba(59,130,246,0.12)', borderLeftWidth: 3, borderLeftColor: '#3B82F6' },
+  segLabelSelected: { color: '#93C5FD', fontWeight: '600' },
   segLabelCol: { width: 70 },
   segCarrierCol: { flex: 1, alignItems: 'center' },
   segHeaderText: { color: '#9CA3AF', fontSize: 9, fontWeight: '600' },

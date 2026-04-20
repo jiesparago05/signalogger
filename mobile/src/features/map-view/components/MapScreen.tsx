@@ -27,7 +27,7 @@ import { RoutesList } from '../../routes/components/RoutesList';
 import { RouteDetail } from '../../routes/components/RouteDetail';
 import { MappingSession, CommuteRoute } from '../../../types/signal';
 import { LocationComparison } from '../../comparison/components/LocationComparison';
-import { RouteComparison } from '../../comparison/components/RouteComparison';
+import { RouteComparison, RouteSegmentGeo } from '../../comparison/components/RouteComparison';
 import { SaveRouteModal } from '../../sessions/components/SaveRouteModal';
 import { useDeadZone } from '../../dead-zone/hooks/use-dead-zone';
 import { DeadZoneBanner } from '../../dead-zone/components/DeadZoneBanner';
@@ -264,6 +264,104 @@ const LEAFLET_HTML = `
       sessionPolylines = [];
       sessionMarkers = [];
       if (window._highlightMarker) { map.removeLayer(window._highlightMarker); window._highlightMarker = null; }
+      clearRouteSegments();
+    }
+
+    // Route comparison — per-km color-coded segments
+    var _routeSegLines = [];
+    var _routeSegMarkers = [];
+
+    function drawRouteSegments(segs) {
+      clearRouteSegments();
+      if (!segs || segs.length === 0) return;
+      hideDots();
+      var allLats = [], allLngs = [];
+      window._routeSegsData = segs;
+
+      segs.forEach(function(seg, i) {
+        var points = [[seg.startLat, seg.startLng], [seg.endLat, seg.endLng]];
+        allLats.push(seg.startLat, seg.endLat);
+        allLngs.push(seg.startLng, seg.endLng);
+
+        var line = L.polyline(points, {
+          color: seg.color, weight: 6, opacity: 0.85,
+          lineCap: 'round', lineJoin: 'round',
+        }).addTo(map);
+        line._segIdx = i;
+        line.on('click', function() {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentTap', index: i }));
+        });
+        _routeSegLines.push(line);
+      });
+
+      // Start marker (green)
+      var s = segs[0];
+      var startM = L.circleMarker([s.startLat, s.startLng], {
+        radius: 7, fillColor: '#22C55E', fillOpacity: 1, stroke: true, color: '#fff', weight: 3,
+      }).addTo(map);
+      _routeSegMarkers.push(startM);
+
+      // End marker (red)
+      var e = segs[segs.length - 1];
+      var endM = L.circleMarker([e.endLat, e.endLng], {
+        radius: 7, fillColor: '#EF4444', fillOpacity: 1, stroke: true, color: '#fff', weight: 3,
+      }).addTo(map);
+      _routeSegMarkers.push(endM);
+
+      // Fit bounds
+      map.fitBounds([
+        [Math.min.apply(null, allLats) - 0.003, Math.min.apply(null, allLngs) - 0.003],
+        [Math.max.apply(null, allLats) + 0.003, Math.max.apply(null, allLngs) + 0.003],
+      ], { paddingTopLeft: [20, 20], paddingBottomRight: [20, 300] });
+    }
+
+    var _activeSegLabel = null;
+
+    function highlightRouteSegment(idx) {
+      // Remove previous label
+      if (_activeSegLabel) { map.removeLayer(_activeSegLabel); _activeSegLabel = null; }
+
+      _routeSegLines.forEach(function(line) {
+        if (line._segIdx === idx) {
+          line.setStyle({ weight: 10, opacity: 1.0 });
+          line.bringToFront();
+        } else {
+          line.setStyle({ weight: 4, opacity: 0.35 });
+        }
+      });
+
+      // Show label on the highlighted segment only
+      var segs = window._routeSegsData;
+      if (segs && segs[idx]) {
+        var seg = segs[idx];
+        var midLat = (seg.startLat + seg.endLat) / 2;
+        var midLng = (seg.startLng + seg.endLng) / 2;
+        _activeSegLabel = L.marker([midLat, midLng], {
+          icon: L.divIcon({
+            className: 'seg-label',
+            html: '<div style="background:rgba(15,23,42,0.95);color:#fff;font-size:10px;padding:3px 8px;border-radius:6px;white-space:nowrap;border:1px solid ' + seg.color + ';font-weight:600;">' + seg.label + '</div>',
+            iconSize: [60, 20],
+            iconAnchor: [30, 10],
+          }),
+          interactive: false,
+        }).addTo(map);
+      }
+    }
+
+    function clearRouteSegmentHighlight() {
+      if (_activeSegLabel) { map.removeLayer(_activeSegLabel); _activeSegLabel = null; }
+      _routeSegLines.forEach(function(line) {
+        line.setStyle({ weight: 6, opacity: 0.85 });
+      });
+    }
+
+    function clearRouteSegments() {
+      _routeSegLines.forEach(function(l) { map.removeLayer(l); });
+      _routeSegMarkers.forEach(function(m) { map.removeLayer(m); });
+      if (_activeSegLabel) { map.removeLayer(_activeSegLabel); _activeSegLabel = null; }
+      _routeSegLines = [];
+      _routeSegMarkers = [];
+      window._routeSegsData = null;
     }
 
     function hideDots() {
@@ -609,8 +707,8 @@ export function MapScreen() {
 
     let js = 'clearOverlays();';
 
-    // Hide dots/heatmap when viewing a session detail (only trail shows)
-    if (selectedSession) {
+    // Hide dots/heatmap when viewing a session detail or route comparison (only trail shows)
+    if (selectedSession || routeCompareId) {
       webViewRef.current.injectJavaScript(js + 'true;');
       return;
     }
@@ -653,7 +751,7 @@ export function MapScreen() {
     }
 
     webViewRef.current.injectJavaScript(js + 'true;');
-  }, [signals, consolidated, heatmapTiles, heatmapVisible, inDeadZone, selectedSession, summaryOpen]);
+  }, [signals, consolidated, heatmapTiles, heatmapVisible, inDeadZone, selectedSession, summaryOpen, routeCompareId]);
 
   // Update overlays when data changes
   React.useEffect(() => {
@@ -1074,8 +1172,20 @@ export function MapScreen() {
             routeId={routeCompareId}
             routeName={routeCompareName}
             onBack={() => {
+              webViewRef.current?.injectJavaScript('clearRouteSegments(); true;');
               setRouteCompareId(null);
               setRouteCompareName('');
+            }}
+            onDrawSegments={(segs: RouteSegmentGeo[]) => {
+              webViewRef.current?.injectJavaScript(
+                `drawRouteSegments(${JSON.stringify(segs)}); true;`
+              );
+            }}
+            onHighlightSegment={(idx: number) => {
+              webViewRef.current?.injectJavaScript(`highlightRouteSegment(${idx}); true;`);
+            }}
+            onClearHighlight={() => {
+              webViewRef.current?.injectJavaScript('clearRouteSegmentHighlight(); true;');
             }}
           />
         </View>
